@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
@@ -218,6 +218,16 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithRedirect(auth, provider);
+    } catch (error) {
+      console.error("Erro no login com Google:", error);
+      alert("Não foi possível realizar o login. Tente abrir no navegador padrão do celular.");
+    }
+  };
 
   const handleLogout = async () => {
     setLoading(true);
@@ -709,13 +719,13 @@ export default function App() {
 
     const updateEx = (index, field, value) => {
       const newExercises = [...currentWorkout.exercises];
-      newExercises[index][field] = value;
+      newExercises[index] = { ...newExercises[index], [field]: value };
       setCurrentWorkout({ ...currentWorkout, exercises: newExercises });
     };
 
     const toggleComplete = (index) => {
       const newExercises = [...currentWorkout.exercises];
-      newExercises[index].completed = !newExercises[index].completed;
+      newExercises[index] = { ...newExercises[index], completed: !newExercises[index].completed };
       setCurrentWorkout({ ...currentWorkout, exercises: newExercises });
     };
 
@@ -978,8 +988,8 @@ export default function App() {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-bold capitalize">{monthName}</h2>
             <div className="flex gap-2">
-              <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() - 1)))} className="p-2 hover:bg-gray-100 rounded-xl"><ChevronLeft size={20} /></button>
-              <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() + 1)))} className="p-2 hover:bg-gray-100 rounded-xl"><ChevronRight size={20} /></button>
+              <button onClick={() => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="p-2 hover:bg-gray-100 rounded-xl"><ChevronLeft size={20} /></button>
+              <button onClick={() => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="p-2 hover:bg-gray-100 rounded-xl"><ChevronRight size={20} /></button>
             </div>
           </div>
 
