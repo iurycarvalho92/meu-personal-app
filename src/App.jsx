@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
@@ -217,7 +217,7 @@ export default function App() {
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Erro ao fazer login com o Google", error);
       alert("Erro ao fazer login. Tente novamente.");
