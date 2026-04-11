@@ -220,7 +220,16 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
+    setLoading(true);
     await signOut(auth);
+    // Reset state after logout
+    setWeeklyPlan({});
+    setCustomWorkouts({});
+    setWorkoutLogs([]);
+    setCurrentWorkout(null);
+    setAiInsight("");
+    setCalendarSuggestion("");
+    setActiveTab('dashboard');
   };
 
   // --- Firestore Data Fetching ---
