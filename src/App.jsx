@@ -230,6 +230,8 @@ export default function App() {
     setAiInsight("");
     setCalendarSuggestion("");
     setActiveTab('dashboard');
+    // Force reload to ensure clean state
+    window.location.reload();
   };
 
   // --- Firestore Data Fetching ---
