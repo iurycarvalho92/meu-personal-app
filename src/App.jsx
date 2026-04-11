@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithPopup } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
@@ -219,29 +219,8 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleGoogleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      });
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.message.includes('cross-origin')) {
-        console.warn("Popup blocked or cross-origin issue. Falling back to redirect...", error);
-        try {
-          const redirectProvider = new GoogleAuthProvider();
-          redirectProvider.setCustomParameters({ prompt: 'select_account' });
-          await signInWithRedirect(auth, redirectProvider);
-        } catch (redirectError) {
-          console.error("Erro no redirecionamento", redirectError);
-          alert("Erro ao fazer login com redirecionamento. Verifique se seu navegador está bloqueando cookies de terceiros.");
-        }
-      } else {
-        console.error("Erro ao fazer login com o Google", error);
-        alert(`Erro ao fazer login: ${error.message}`);
-      }
-    }
+  const handleLogout = async () => {
+    await signOut(auth);
   };
 
   // --- Firestore Data Fetching ---
@@ -498,6 +477,23 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        <section>
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Logado como:</p>
+                <p className="font-bold text-gray-800">{user.email}</p>
+              </div>
+              <button 
+                onClick={handleLogout} 
+                className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-red-600 transition active:scale-95"
+              >
+                Sair
+              </button>
+            </div>
+          </div>
+        </section>
 
         <section>
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
