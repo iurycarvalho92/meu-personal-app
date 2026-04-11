@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
@@ -201,8 +201,6 @@ export default function App() {
       try {
         if (typeof window !== 'undefined' && typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
           await signInWithCustomToken(auth, window.__initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("Auth error:", err);
@@ -211,10 +209,20 @@ export default function App() {
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (!u) setLoading(false);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Erro ao fazer login com o Google", error);
+      alert("Erro ao fazer login. Tente novamente.");
+    }
+  };
 
   // --- Firestore Data Fetching ---
   useEffect(() => {
@@ -1004,6 +1012,25 @@ export default function App() {
         <Activity className="animate-spin text-blue-600" size={48} />
         <p className="text-gray-400 font-bold animate-pulse">A carregar o seu Personal...</p>
       </div>
+    </div>
+  );
+
+  if (!user) return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-[#FDFDFF] p-4 text-center space-y-8">
+        <div className="bg-blue-600 p-6 rounded-full shadow-lg">
+          <Dumbbell size={64} className="text-white" />
+        </div>
+        <div className="space-y-2">
+            <h1 className="text-3xl font-black text-gray-800 tracking-tight">Personal.ai</h1>
+            <p className="text-gray-500 font-medium">Sua evolução fitness, guiada por inteligência.</p>
+        </div>
+        <button 
+          onClick={handleGoogleLogin}
+          className="bg-white border-2 border-gray-100 flex items-center justify-center gap-3 w-full max-w-sm py-4 rounded-2xl shadow-sm hover:bg-gray-50 hover:border-gray-200 transition-all font-bold text-gray-700 active:scale-95"
+        >
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="Google" />
+          Continuar com o Google
+        </button>
     </div>
   );
 
