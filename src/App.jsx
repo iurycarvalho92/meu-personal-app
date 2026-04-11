@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
@@ -208,7 +208,11 @@ export default function App() {
         }
       } catch (err) {
         console.error("Auth error during init:", err);
-        alert("Erro na autenticação. Tente novamente.");
+        if (err.code === 'auth/unauthorized-domain') {
+          alert(`Para testar no celular via Wi-Fi, adicione este IP (${window.location.hostname}) na aba "Authentication > Settings > Authorized domains" do seu painel do Firebase Console.`);
+        } else {
+          alert("Erro na autenticação: " + err.message);
+        }
       }
     };
     initAuth();
@@ -220,12 +224,31 @@ export default function App() {
   }, []);
 
   const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    
+    // Try popup first as it is more stable on PC and most modern browsers
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Erro no login com Google:", error);
-      alert("Não foi possível realizar o login. Tente abrir no navegador padrão do celular.");
+      console.error("Erro no login com Google (Popup):", error);
+      
+      if (error.code === 'auth/unauthorized-domain') {
+        alert(`Acesso bloqueado! Para testar no celular ou num IP local, você deve adicionar "${window.location.hostname}" na aba "Authentication > Settings > Authorized domains" do Firebase Console.`);
+        return;
+      }
+      
+      // Fallback to redirect if popup is blocked (common in in-app browsers like WhatsApp/Instagram)
+      if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, provider);
+        } catch (redirectError) {
+          console.error("Erro no login com Google (Redirect):", redirectError);
+          alert("Não foi possível realizar o login. Tente abrir no navegador padrão do celular (Chrome/Safari).");
+        }
+      } else {
+        alert("Erro na autenticação: " + error.message);
+      }
     }
   };
 
