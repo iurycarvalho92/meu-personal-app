@@ -45,11 +45,10 @@ const db = getFirestore(app);
 
 
 // --- Gemini API Setup ---
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`; // Runtime provides the key
+const apiKey = "AIzaSyAy5-vjoOL-6dUESiC2xq8v_tEpY7wZYng"; // Runtime provides the key
 
 const callGemini = async (prompt, systemPrompt = "Você é um personal trainer expert.") => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-  
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;  
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemPrompt }] }
