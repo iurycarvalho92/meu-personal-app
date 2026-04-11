@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
@@ -202,8 +202,13 @@ export default function App() {
         if (typeof window !== 'undefined' && typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
           await signInWithCustomToken(auth, window.__initial_auth_token);
         }
+        const result = await getRedirectResult(auth);
+        if (result) {
+          console.log("Logged in via redirect", result.user);
+        }
       } catch (err) {
-        console.error("Auth error:", err);
+        console.error("Auth error during init:", err);
+        alert("Erro na autenticação. Tente novamente.");
       }
     };
     initAuth();
@@ -217,10 +222,25 @@ export default function App() {
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Erro ao fazer login com o Google", error);
-      alert("Erro ao fazer login. Tente novamente.");
+      if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.message.includes('cross-origin')) {
+        console.warn("Popup blocked or cross-origin issue. Falling back to redirect...", error);
+        try {
+          const redirectProvider = new GoogleAuthProvider();
+          redirectProvider.setCustomParameters({ prompt: 'select_account' });
+          await signInWithRedirect(auth, redirectProvider);
+        } catch (redirectError) {
+          console.error("Erro no redirecionamento", redirectError);
+          alert("Erro ao fazer login com redirecionamento. Verifique se seu navegador está bloqueando cookies de terceiros.");
+        }
+      } else {
+        console.error("Erro ao fazer login com o Google", error);
+        alert(`Erro ao fazer login: ${error.message}`);
+      }
     }
   };
 
