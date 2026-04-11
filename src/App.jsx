@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, addDoc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -42,6 +42,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const appId = firebaseConfig.appId;
 
 
 // --- Gemini API Setup ---
@@ -198,8 +199,8 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+        if (typeof window !== 'undefined' && typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+          await signInWithCustomToken(auth, window.__initial_auth_token);
         } else {
           await signInAnonymously(auth);
         }
@@ -293,7 +294,8 @@ export default function App() {
       const prompt = `Analise meu progresso recente e dê 3 dicas práticas para melhorar: ${JSON.stringify(recentLogs)}`;
       const insight = await callGemini(prompt, "Você é um analista de performance fitness motivador. Seja conciso (max 300 caracteres).");
       setAiInsight(insight);
-    } catch (err) {
+    } catch (error) {
+      console.error(error);
       setAiInsight("Não consegui analisar agora. Continue treinando!");
     } finally {
       setAiLoading(false);
