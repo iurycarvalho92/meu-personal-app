@@ -50,7 +50,7 @@ const appId = firebaseConfig.appId;
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "COLOQUE_AQUI_SUA_API_KEY"; // Runtime provides the key
 
 const callGemini = async (prompt, systemPrompt = "Você é um personal trainer expert.") => {
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;  
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;  
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemPrompt }] }
