@@ -27,7 +27,8 @@ import {
   Target,
   Lock,
   Unlock,
-  Wand2
+  Wand2,
+  RefreshCw
 } from 'lucide-react';
 
 // --- Firebase Configuration & Initialization ---
@@ -49,7 +50,7 @@ const appId = firebaseConfig.appId;
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "COLOQUE_AQUI_SUA_API_KEY"; // Runtime provides the key
 
 const callGemini = async (prompt, systemPrompt = "Você é um personal trainer expert.") => {
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;  
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;  
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemPrompt }] }
@@ -62,10 +63,21 @@ const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!response.ok) throw new Error('API Error');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        const errorMsg = errorData?.error?.message || 'API Error';
+        const err = new Error(errorMsg);
+        err.status = response.status;
+        throw err;
+      }
       return await response.json();
     } catch (err) {
-      if (retries < 5) {
+      // Do not retry on client errors like 400 (Bad Request/Expired Key) or 404 (Model Not Found)
+      if (err.status >= 400 && err.status < 500) {
+        console.error("Gemini API Error:", err.message);
+        throw err;
+      }
+      if (retries < 3) {
         await new Promise(res => setTimeout(res, Math.pow(2, retries) * 1000));
         return fetchWithBackoff(retries + 1);
       }
@@ -86,6 +98,16 @@ const MODALITIES = [
 ];
 
 const WEEK_DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+const FUNNY_PHRASES = [
+  "Bora suar essa camisa?",
+  "Tá pago ou tá devendo?",
+  "O sofá não constrói glúteos!",
+  "Mais um dia, mais um treino!",
+  "Sem dor, sem pizza!",
+  "A dor é a fraqueza saindo do corpo!",
+  "Levanta e vai, o shape não vem pelo correio!"
+];
 
 // --- 3-Month Progression Programs ---
 const PROGRAMS = {
@@ -173,6 +195,11 @@ export default function App() {
   const [workoutTimer, setWorkoutTimer] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [swapLoadingIdx, setSwapLoadingIdx] = useState(null);
+  const [workoutEffort, setWorkoutEffort] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [onboardingData, setOnboardingData] = useState({ name: '', age: '', gender: 'Masculino', height: '', weight: '', goal: 'Ser ativo', activities: [] });
 
   // --- Helper: Get Current Phase based on Logs ---
   // Every 4 workouts of a specific modality = 1 Phase (Month)
@@ -271,6 +298,19 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data());
+      } else {
+        setProfile(null);
+      }
+      setProfileLoading(false);
+    }, (err) => {
+      console.error("Erro ao carregar o perfil:", err);
+      setProfileLoading(false);
+    });
+
     const planRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'weeklyPlan');
     const unsubPlan = onSnapshot(planRef, (docSnap) => {
       if (docSnap.exists()) setWeeklyPlan(docSnap.data());
@@ -293,7 +333,7 @@ export default function App() {
       setWorkoutLogs(logs);
     }, (err) => console.error("Erro ao carregar registos de treino:", err));
 
-    return () => { unsubPlan(); unsubCustom(); unsubLogs(); };
+    return () => { unsubProfile(); unsubPlan(); unsubCustom(); unsubLogs(); };
   }, [user]);
 
   // --- AI Actions ---
@@ -437,7 +477,47 @@ export default function App() {
     }
   };
 
+  const swapExercise = async (index) => {
+    if (!currentWorkout) return;
+    setSwapLoadingIdx(index);
+    try {
+      const exToSwap = currentWorkout.exercises[index];
+      const prompt = `Atue como personal trainer. O usuário precisa de uma alternativa para o exercício "${exToSwap.name}" porque não sabe fazer ou não tem o aparelho disponível. O objetivo é manter o mesmo grupo muscular e intenção (séries: ${exToSwap.sets}, reps: ${exToSwap.reps}).
+      Retorne APENAS um JSON válido neste formato: {"name": "nome do exercicio alternativo", "sets": ${exToSwap.sets}, "reps": "${exToSwap.reps}"}`;
+      
+      const responseText = await callGemini(prompt, "Você responde apenas com JSON válido.");
+      if (!responseText) {
+        throw new Error("A IA retornou uma resposta vazia. Tente novamente.");
+      }
+      const cleanedText = responseText.replace(/```json|```/g, "").trim();
+      const newEx = JSON.parse(cleanedText);
+      
+      const newExercises = [...currentWorkout.exercises];
+      newExercises[index] = { 
+        ...newExercises[index], 
+        name: newEx.name, 
+        sets: newEx.sets, 
+        reps: newEx.reps 
+      };
+      setCurrentWorkout(prev => ({ ...prev, exercises: newExercises }));
+    } catch (err) {
+      console.error("Erro ao trocar exercício:", err);
+      alert(`Não foi possível gerar uma alternativa agora. Erro: ${err.message}`);
+    } finally {
+      setSwapLoadingIdx(null);
+    }
+  };
+
   // --- Base Actions ---
+  const saveProfile = async (e) => {
+    e?.preventDefault();
+    if (!user) return;
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
+    await setDoc(profileRef, onboardingData);
+    setProfile(onboardingData);
+    setActiveTab('dashboard'); // Also switch to dashboard if coming from an edit screen
+  };
+
   const saveWeeklyPlan = async (newPlan) => {
     if (!user) return;
     const planRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'weeklyPlan');
@@ -455,6 +535,7 @@ export default function App() {
       date: new Date().toISOString(),
       exercises: baseExercises.map(ex => ({ ...ex, weight: '', actualReps: '', completed: false }))
     });
+    setWorkoutEffort(null);
     setActiveTab('active-workout');
     setWorkoutTimer(0);
     setIsTimerRunning(true);
@@ -462,38 +543,140 @@ export default function App() {
 
   const finishWorkout = async () => {
     if (!user || !currentWorkout) return;
+    if (!workoutEffort) {
+      alert("Por favor, avalie o esforço do treino antes de finalizar.");
+      return;
+    }
     setIsTimerRunning(false);
     const logsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'workoutLogs');
     await addDoc(logsRef, {
       ...currentWorkout,
+      effort: workoutEffort,
       timestamp: Date.now(),
       durationSeconds: workoutTimer,
       totalCompleted: currentWorkout.exercises.filter(e => e.completed).length
     });
     setCurrentWorkout(null);
+    setWorkoutEffort(null);
     setAiInsight(""); // Clear insight to trigger new tip
     setActiveTab('history');
   };
 
   // --- Components ---
 
+  const renderOnboarding = () => {
+    return (
+      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+        <div className="text-center">
+          <h2 className="text-2xl font-black text-gray-800">Bem-vindo(a)! 🎉</h2>
+          <p className="text-gray-500 text-sm mt-2">Para criar os seus treinos com IA no futuro, precisamos de algumas informações básicas.</p>
+        </div>
+        
+        <form onSubmit={saveProfile} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Como quer ser chamado?</label>
+            <input required type="text" value={onboardingData.name} onChange={e => setOnboardingData({...onboardingData, name: e.target.value})} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-blue-500 focus:outline-none transition" placeholder="Ex: Iury" />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Idade</label>
+              <input required type="number" value={onboardingData.age} onChange={e => setOnboardingData({...onboardingData, age: e.target.value})} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-blue-500 focus:outline-none transition" placeholder="Anos" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Gênero</label>
+              <select value={onboardingData.gender} onChange={e => setOnboardingData({...onboardingData, gender: e.target.value})} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-blue-500 focus:outline-none transition bg-white">
+                <option>Masculino</option>
+                <option>Feminino</option>
+                <option>Outro</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Altura (cm)</label>
+              <input required type="number" value={onboardingData.height} onChange={e => setOnboardingData({...onboardingData, height: e.target.value})} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-blue-500 focus:outline-none transition" placeholder="Ex: 170" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Peso (kg)</label>
+              <input required type="number" value={onboardingData.weight} onChange={e => setOnboardingData({...onboardingData, weight: e.target.value})} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-blue-500 focus:outline-none transition" placeholder="Ex: 67" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Objetivo Principal</label>
+            <select value={onboardingData.goal} onChange={e => setOnboardingData({...onboardingData, goal: e.target.value})} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-blue-500 focus:outline-none transition bg-white">
+              <option>Ser ativo (Saúde)</option>
+              <option>Perder peso (Emagrecimento)</option>
+              <option>Ganhar músculo (Hipertrofia)</option>
+              <option>Performance Esportiva</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Esportes / Atividades</label>
+            <div className="grid grid-cols-2 gap-2">
+              {MODALITIES.map(mod => (
+                <label key={mod.id} className={`flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition ${onboardingData.activities.includes(mod.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={onboardingData.activities.includes(mod.id)}
+                    onChange={(e) => {
+                      const acts = onboardingData.activities;
+                      if (e.target.checked) setOnboardingData({...onboardingData, activities: [...acts, mod.id]});
+                      else setOnboardingData({...onboardingData, activities: acts.filter(a => a !== mod.id)});
+                    }}
+                  />
+                  <mod.icon size={16} className={onboardingData.activities.includes(mod.id) ? 'text-blue-500' : 'text-gray-400'} />
+                  <span className={`text-sm font-bold ${onboardingData.activities.includes(mod.id) ? 'text-blue-700' : 'text-gray-600'}`}>{mod.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition shadow-lg mt-4">
+            Salvar e Começar
+          </button>
+        </form>
+      </div>
+    );
+  };
+
   const renderDashboard = () => {
     const today = new Date().getDay();
     const plannedForToday = weeklyPlan[today];
+
+    const firstName = profile?.name || user?.displayName?.split(' ')[0] || 'Iury';
+    const funnyPhrase = FUNNY_PHRASES[new Date().getDay() % FUNNY_PHRASES.length];
 
     return (
       <div className="space-y-6">
         <header className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Olá, Atleta! 👋</h1>
-              <p className="text-gray-500 mt-1">34 anos • 170cm • 67kg</p>
+              <h1 className="text-2xl font-bold text-gray-800">Olá, {firstName}! 👋</h1>
+              <p className="text-gray-500 mt-1 text-sm font-medium">{funnyPhrase}</p>
+              {profile && (
+                <p className="text-gray-400 mt-2 text-xs font-bold bg-gray-50 inline-block px-2 py-1 rounded-md">
+                  {profile.age} anos • {profile.height}cm • {profile.weight}kg
+                </p>
+              )}
             </div>
-            <User className="text-blue-500 bg-blue-50 p-2 rounded-full" size={40} />
+            <button 
+              onClick={() => {
+                if (profile) setOnboardingData(profile);
+                setProfile(null); // Triggers the onboarding view to act as an edit screen
+              }}
+              className="text-blue-500 bg-blue-50 p-2 rounded-full hover:bg-blue-100 transition active:scale-95"
+              title="Editar Perfil"
+            >
+              <User size={24} />
+            </button>
           </div>
-          
-          <div className="mt-6 p-4 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl text-white shadow-md relative overflow-hidden">
-            <Sparkles className="absolute -right-2 -top-2 opacity-20 w-24 h-24 rotate-12" />
+
+          <div className="mt-6 p-4 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl text-white shadow-md relative overflow-hidden">            <Sparkles className="absolute -right-2 -top-2 opacity-20 w-24 h-24 rotate-12" />
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-2">
                 <BrainCircuit size={18} />
@@ -628,12 +811,34 @@ export default function App() {
           <p className="text-sm text-gray-500 mb-6">Agende os seus treinos da semana de acordo com a sua disponibilidade, ou peça à IA para distribuir 2 sessões otimizadas.</p>
           
           <div className="space-y-3">
-            {WEEK_DAYS.map((day, index) => (
-              <div key={day} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                <span className="font-bold text-gray-700">{day}</span>
+            {WEEK_DAYS.map((day, index) => {
+              const todayIdx = new Date().getDay();
+              const startOfWeek = new Date();
+              startOfWeek.setDate(startOfWeek.getDate() - todayIdx);
+              const dateForDay = new Date(startOfWeek);
+              dateForDay.setDate(startOfWeek.getDate() + index);
+              const dateString = dateForDay.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+              const isToday = index === todayIdx;
+
+              const selectedModality = MODALITIES.find(m => m.id === weeklyPlan[index]);
+
+              return (
+              <div key={day} className={`flex items-center justify-between p-4 rounded-2xl transition-all ${isToday ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 shadow-md transform scale-[1.02]' : 'bg-white border border-gray-100 shadow-sm hover:border-blue-100 hover:shadow-md'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-10 rounded-full ${isToday ? 'bg-blue-500' : selectedModality ? selectedModality.color.replace('bg-', 'bg-').replace('500', '400') : 'bg-gray-200'}`} />
+                  <div className="flex flex-col">
+                    <span className={`font-bold ${isToday ? 'text-blue-800' : 'text-gray-700'}`}>{day}</span>
+                    <span className={`text-[10px] ${isToday ? 'text-blue-600 font-bold' : 'text-gray-400'}`}>{dateString} {isToday && '(Hoje)'}</span>
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
+                  {selectedModality && (
+                    <div className={`p-1.5 rounded-lg ${selectedModality.color} text-white shadow-sm`}>
+                      {React.createElement(selectedModality.icon, { size: 14 })}
+                    </div>
+                  )}
                   <select 
-                    className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700"
+                    className={`bg-white border-2 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all ${selectedModality ? 'border-blue-100 text-blue-700' : 'border-gray-100 text-gray-500'}`}
                     value={weeklyPlan[index] || ''}
                     onChange={(e) => {
                       const newPlan = { ...weeklyPlan, [index]: e.target.value };
@@ -648,7 +853,8 @@ export default function App() {
                   </select>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -818,8 +1024,18 @@ export default function App() {
           {currentWorkout.exercises.map((ex, idx) => (
             <div key={idx} className={`p-5 rounded-3xl border-2 transition-all ${ex.completed ? 'bg-green-50 border-green-200 opacity-75 scale-95' : 'bg-white border-gray-100 shadow-sm'}`}>
               <div className="flex justify-between items-start mb-4">
-                <div className="pr-2">
-                  <h3 className="font-bold text-gray-800 text-lg leading-tight">{ex.name}</h3>
+                <div className="pr-2 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-gray-800 text-lg leading-tight">{ex.name}</h3>
+                    <button 
+                      onClick={() => swapExercise(idx)}
+                      disabled={swapLoadingIdx === idx || ex.completed}
+                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition disabled:opacity-50"
+                      title="Trocar exercício por outro semelhante"
+                    >
+                      <RefreshCw size={16} className={swapLoadingIdx === idx ? 'animate-spin text-blue-500' : ''} />
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2 mt-2">
                     <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-tighter">
                       {ex.sets} séries
@@ -868,7 +1084,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="flex justify-center mt-6 mb-24">
+        <div className="flex justify-center mt-6 mb-8">
           <button
             onClick={addBonusExercise}
             disabled={bonusAiLoading}
@@ -877,6 +1093,28 @@ export default function App() {
             {bonusAiLoading ? <Activity size={18} className="animate-spin" /> : <Sparkles size={18} />}
             {bonusAiLoading ? 'A preparar o desafio...' : 'Pedir Desafio Bónus à IA'}
           </button>
+        </div>
+
+        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm mb-24">
+          <h3 className="font-bold text-gray-800 mb-3 text-center text-sm">Como foi o treino?</h3>
+          <div className="flex justify-between gap-1">
+            {[
+              { value: 1, label: 'Muito Leve', emoji: '🥱' },
+              { value: 2, label: 'Leve', emoji: '🙂' },
+              { value: 3, label: 'Moderado', emoji: '😅' },
+              { value: 4, label: 'Difícil', emoji: '🥵' },
+              { value: 5, label: 'Máximo', emoji: '💀' }
+            ].map(level => (
+              <button 
+                key={level.value}
+                onClick={() => setWorkoutEffort(level.value)}
+                className={`flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-xl transition-all ${workoutEffort === level.value ? 'bg-blue-50 border-2 border-blue-500 scale-105 shadow-sm' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'}`}
+              >
+                <span className="text-2xl mb-1">{level.emoji}</span>
+                <span className={`text-[9px] font-bold uppercase text-center leading-tight ${workoutEffort === level.value ? 'text-blue-700' : 'text-gray-500'}`}>{level.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="fixed bottom-6 left-4 right-4 max-w-md mx-auto">
@@ -1028,19 +1266,29 @@ export default function App() {
               const day = i + 1;
               const logs = getLogsForDay(day);
               const hasWorkout = logs.length > 0;
-              const isToday = new Date().getDate() === day && new Date().getMonth() === currentMonth.getMonth();
+              const isToday = new Date().getDate() === day && new Date().getMonth() === currentMonth.getMonth() && new Date().getFullYear() === currentMonth.getFullYear();
+
+              const dayOfWeek = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).getDay();
+              const plannedModalityId = weeklyPlan[dayOfWeek];
+              const isPlannedForDay = !!plannedModalityId && !hasWorkout;
+              const plannedModality = MODALITIES.find(m => m.id === plannedModalityId);
 
               return (
                 <div 
                   key={day} 
-                  className={`aspect-square flex flex-col items-center justify-center rounded-2xl relative transition ${isToday ? 'bg-blue-600 text-white shadow-lg scale-110 z-10' : hasWorkout ? 'bg-blue-50 text-blue-800' : 'bg-gray-50 text-gray-400'}`}
+                  className={`aspect-square flex flex-col items-center justify-center rounded-2xl relative transition-all ${isToday ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg scale-110 z-10 border border-blue-400' : hasWorkout ? 'bg-blue-50 text-blue-800 border border-blue-100 shadow-sm' : isPlannedForDay ? `bg-white border-2 border-dashed ${plannedModality ? plannedModality.color.replace('bg-', 'border-').replace('500', '200') : 'border-gray-200'} text-gray-700` : 'bg-gray-50 text-gray-400 border border-transparent'}`}
                 >
                   <span className="text-xs font-bold">{day}</span>
                   {hasWorkout && !isToday && (
-                    <div className="flex gap-0.5 mt-1">
+                    <div className="flex gap-1 mt-1">
                       {logs.map((l, idx) => (
-                        <div key={idx} className={`w-1.5 h-1.5 rounded-full ${MODALITIES.find(m => m.id === l.modalityId)?.color || 'bg-yellow-500'}`} />
+                        <div key={idx} className={`w-1.5 h-1.5 rounded-full ${MODALITIES.find(m => m.id === l.modalityId)?.color || 'bg-yellow-500'} shadow-sm`} />
                       ))}
+                    </div>
+                  )}
+                  {isPlannedForDay && !isToday && (
+                    <div className="flex gap-1 mt-1">
+                      <div className={`w-1.5 h-1.5 rounded-full border-2 ${plannedModality ? plannedModality.color.replace('bg-', 'border-') : 'border-gray-300'}`} />
                     </div>
                   )}
                 </div>
@@ -1097,15 +1345,21 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FDFDFF] text-gray-900 font-sans max-w-md mx-auto relative">
       <main className="p-4 pt-8 pb-32">
-        {activeTab === 'dashboard' && renderDashboard()}
-        {activeTab === 'planner' && renderPlanner()}
-        {activeTab === 'active-workout' && renderWorkoutLogger()}
-        {activeTab === 'calendar' && renderCalendarView()}
-        {activeTab === 'history' && renderHistory()}
+        {!profileLoading && !profile ? (
+          renderOnboarding()
+        ) : (
+          <>
+            {activeTab === 'dashboard' && renderDashboard()}
+            {activeTab === 'planner' && renderPlanner()}
+            {activeTab === 'active-workout' && renderWorkoutLogger()}
+            {activeTab === 'calendar' && renderCalendarView()}
+            {activeTab === 'history' && renderHistory()}
+          </>
+        )}
       </main>
 
       {/* Bottom Navigation */}
-      {activeTab !== 'active-workout' && (
+      {activeTab !== 'active-workout' && profile && (
         <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-100 flex justify-around py-4 z-50 max-w-md mx-auto rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] px-4">
           {[
             { id: 'dashboard', icon: Activity, label: 'Resumo' },
