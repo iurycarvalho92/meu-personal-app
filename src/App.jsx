@@ -49,8 +49,35 @@ const appId = firebaseConfig.appId;
 // --- Gemini API Setup ---
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "COLOQUE_AQUI_SUA_API_KEY"; // Runtime provides the key
 
+// Rate Limiting Logic (6 requests per minute)
+const geminiRequestTimestamps = [];
+const enforceRateLimit = async () => {
+  const MAX_REQUESTS_PER_MINUTE = 6;
+  const MINUTE_IN_MS = 60000;
+  
+  while (true) {
+    const now = Date.now();
+    // Clean up old timestamps
+    while (geminiRequestTimestamps.length > 0 && now - geminiRequestTimestamps[0] >= MINUTE_IN_MS) {
+      geminiRequestTimestamps.shift();
+    }
+    
+    if (geminiRequestTimestamps.length < MAX_REQUESTS_PER_MINUTE) {
+      geminiRequestTimestamps.push(Date.now());
+      return;
+    }
+    
+    // Need to wait. Calculate time until the oldest request expires
+    const timeToWait = MINUTE_IN_MS - (now - geminiRequestTimestamps[0]);
+    console.warn(`Gemini rate limit (6/min) reached. Waiting ${timeToWait}ms...`);
+    // Add a small buffer (100ms) to ensure we pass the 1-minute mark
+    await new Promise(resolve => setTimeout(resolve, timeToWait + 100));
+  }
+};
+
 const callGemini = async (prompt, systemPrompt = "Você é um personal trainer expert.") => {
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;  
+  await enforceRateLimit();
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;  
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemPrompt }] }
