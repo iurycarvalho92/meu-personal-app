@@ -189,6 +189,16 @@ export default function App() {
     return { remaining: totalPerPhase - completedInPhase, total: totalPerPhase };
   };
 
+  const normalizeDateKey = (date) => {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const hasLoggedWorkoutForDate = (date) => {
+    const targetDate = normalizeDateKey(date);
+    return workoutLogs.some(log => normalizeDateKey(log.timestamp) === targetDate);
+  };
+
   const calculateVolume = (log) => {
     return (log.exercises || []).reduce((total, ex) => {
       if (Array.isArray(ex.setDetails) && ex.setDetails.length) {
@@ -213,11 +223,12 @@ export default function App() {
   };
 
   const getStreak = () => {
-    const days = new Set(workoutLogs.map(log => new Date(log.timestamp).toISOString().split('T')[0]));
+    const days = new Set(workoutLogs.map(log => normalizeDateKey(log.timestamp)));
     let current = new Date();
+    current.setDate(current.getDate() - 1); // Começa a contar a partir de ontem
     let streak = 0;
     while (true) {
-      const dayKey = current.toISOString().split('T')[0];
+      const dayKey = normalizeDateKey(current);
       if (!days.has(dayKey)) break;
       streak += 1;
       current.setDate(current.getDate() - 1);
@@ -225,27 +236,67 @@ export default function App() {
     return streak;
   };
 
+  const getMaxStreak = () => {
+    const sortedLogs = [...workoutLogs].sort((a, b) => a.timestamp - b.timestamp);
+    if (!sortedLogs.length) return 0;
+    
+    let maxStreak = 1;
+    let currentStreak = 1;
+    let lastDate = null;
+    
+    for (let i = 0; i < sortedLogs.length; i++) {
+      const currentDate = normalizeDateKey(sortedLogs[i].timestamp);
+      if (i === 0) {
+        lastDate = currentDate;
+        continue;
+      }
+      
+      const lastTime = new Date(lastDate).getTime();
+      const currentTime = new Date(currentDate).getTime();
+      const dayDiff = (currentTime - lastTime) / (1000 * 60 * 60 * 24);
+      
+      if (dayDiff === 1) {
+        currentStreak += 1;
+        maxStreak = Math.max(maxStreak, currentStreak);
+      } else if (dayDiff > 1) {
+        currentStreak = 1;
+      }
+      lastDate = currentDate;
+    }
+    
+    return maxStreak;
+  };
+
+
   const getUpcomingWorkoutSequence = (modalityId, count = 2) => {
     const phase = getCurrentPhase(modalityId);
     const key = `${modalityId}_${phase}`;
     const loggedCount = workoutLogs.filter(l => l.modalityId === modalityId).length;
-    let workouts = [];
-    if (customWorkouts[key]) {
-      workouts = [customWorkouts[key]];
-    } else {
-      const prog = PROGRAMS[modalityId]?.[phase];
-      if (prog?.workouts) workouts = prog.workouts;
-      else if (prog?.exercises) workouts = [prog.exercises];
+    let baseWorkouts = [];
+    const prog = PROGRAMS[modalityId]?.[phase];
+    if (prog?.workouts) baseWorkouts = prog.workouts;
+    else if (prog?.exercises) baseWorkouts = [prog.exercises];
+    if (!baseWorkouts.length) return [];
+    
+    const customExercises = customWorkouts[key];
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      const nextLogCount = loggedCount + i;
+      const workoutIndex = nextLogCount % baseWorkouts.length;
+      const isCustomized = customExercises && nextLogCount === loggedCount;
+      result.push({
+        phase,
+        workoutIndex: workoutIndex + 1,
+        totalWorkouts: baseWorkouts.length,
+        exercises: isCustomized ? customExercises : baseWorkouts[workoutIndex],
+        label: isCustomized ? 'Personalizado' : `Treino ${workoutIndex + 1}/${baseWorkouts.length}`
+      });
     }
-    if (!workouts.length) return [];
-    return Array.from({ length: count }, (_, index) => ({
-      phase,
-      exercises: workouts[(loggedCount + index) % workouts.length],
-    }));
+    return result;
   };
 
-  const getUpcomingWorkoutForModality = (modalityId) => {
-    return getUpcomingWorkoutSequence(modalityId, 1)[0] || { phase: getCurrentPhase(modalityId), exercises: [] };
+  const getUpcomingWorkoutForModality = (modalityId, offset = 0) => {
+    return getUpcomingWorkoutSequence(modalityId, offset + 1)[offset] || { phase: getCurrentPhase(modalityId), exercises: [], label: 'Próximo treino' };
   };
 
   // --- Timer Setup ---
@@ -553,17 +604,25 @@ export default function App() {
   };
 
   const renderDashboard = () => {
-    const today = new Date().getDay();
-    const plannedForToday = weeklyPlan[today];
+    const todayDate = new Date();
+    const getPlannedModalityForDate = (date) => {
+      const dateStr = normalizeDateKey(date);
+      if (monthlyPlan[dateStr] !== undefined) return monthlyPlan[dateStr];
+      return weeklyPlan[date.getDay()] || '';
+    };
+    const plannedForToday = getPlannedModalityForDate(todayDate);
 
     const firstName = profile?.name || user?.displayName?.split(' ')[0] || 'Iury';
     const funnyPhrase = FUNNY_PHRASES[new Date().getDay() % FUNNY_PHRASES.length];
-    const totalWorkouts = workoutLogs.length;
     const totalPoints = workoutLogs.reduce((sum, log) => sum + getWorkoutPoints(log), 0);
     const currentStreak = getStreak();
-    const totalVolume = workoutLogs.reduce((sum, log) => sum + calculateVolume(log), 0);
     const badge = getBadgeLevel(totalPoints);
-    const monthlyWorkoutCount = workoutLogs.filter(l => {
+    const homeGymMonthlyCount = workoutLogs.filter(l => l.modalityId === 'home' || l.modalityId === 'gym').filter(l => {
+      const logDate = new Date(l.timestamp);
+      const now = new Date();
+      return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear();
+    }).length;
+    const runMonthlyCount = workoutLogs.filter(l => l.modalityId === 'run').filter(l => {
       const logDate = new Date(l.timestamp);
       const now = new Date();
       return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear();
@@ -594,42 +653,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="bg-blue-50 border border-blue-100 p-4 rounded-3xl">
-              <p className="text-xs uppercase font-bold text-blue-600 mb-2">Badge de desempenho</p>
-              <div className="flex items-center gap-3">
-                <span className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl text-white ${badge.color}`}>{badge.title[0]}</span>
-                <div>
-                  <p className="font-black text-gray-800">{badge.title}</p>
-                  <p className="text-sm text-gray-500">{badge.subtitle}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white border border-gray-100 p-4 rounded-3xl shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs uppercase font-bold text-gray-400">Progresso / Métricas</p>
-                <span className="text-xs font-bold text-gray-500">{totalWorkouts} treinos</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm text-gray-600">
-                <div className="bg-gray-50 p-3 rounded-2xl">
-                  <p className="font-black text-gray-800">{currentStreak}d</p>
-                  <p className="text-[10px] uppercase text-gray-500">Sequência</p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-2xl">
-                  <p className="font-black text-gray-800">{monthlyWorkoutCount}</p>
-                  <p className="text-[10px] uppercase text-gray-500">Este mês</p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-2xl">
-                  <p className="font-black text-gray-800">{totalPoints}</p>
-                  <p className="text-[10px] uppercase text-gray-500">Pontos</p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-2xl">
-                  <p className="font-black text-gray-800">{totalVolume}</p>
-                  <p className="text-[10px] uppercase text-gray-500">Volume total</p>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </header>
 
         <section>
@@ -704,64 +728,63 @@ export default function App() {
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Target className="text-green-500" />
-            Progressão dos Planos
-          </h2>
-          <div className="grid grid-cols-1 gap-4">
-            {MODALITIES.filter(m => m.id !== 'footvolley').map(mod => {
-              const phase = getCurrentPhase(mod.id);
-              const progress = getPhaseProgress(mod.id);
-              const totalLogs = workoutLogs.filter(l => l.modalityId === mod.id).length;
-              return (
-                <div key={mod.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-2 rounded-lg ${mod.color} text-white`}><mod.icon size={16} /></div>
-                      <span className="font-bold text-gray-800">{mod.name}</span>
-                    </div>
-                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Mês {phase}</span>
-                  </div>
-                  <div className="text-sm text-gray-600 mb-2">
-                    {progress ? `Faltam ${progress.remaining} treinos nesta fase` : 'Fase completa!'}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Total de treinos: {totalLogs}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <Target size={24} className="text-green-500" />
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">Progresso e Desempenho</h2>
+                <p className="text-sm text-gray-500">Acompanhe sua evolução nos próximos 3 meses</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 mb-6 md:grid-cols-3">
+            <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white p-5 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl ${badge.color} text-white text-lg font-black`}>{badge.title[0]}</span>
+                  <div>
+                    <p className="text-lg font-black">{badge.title}</p>
+                    <p className="text-xs text-white/80">{badge.subtitle}</p>
                   </div>
                 </div>
-              );
-            })}
+                <div className="space-y-2 text-xs text-white/90">
+                  <div className="flex justify-between"><span>Sequência</span><span className="font-bold">{currentStreak}d</span></div>
+                  <div className="flex justify-between"><span>Máximo</span><span className="font-bold">{getMaxStreak()}d</span></div>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Dumbbell size={18} className="text-blue-600" />
+                  <p className="text-sm font-bold text-blue-900">Home + Academia</p>
+                </div>
+                <p className="text-3xl font-black text-blue-900">{homeGymMonthlyCount} / 8</p>
+                <p className="text-xs text-blue-600 mt-1">meta mensal combinada</p>
+                <div className="mt-3 h-2 bg-blue-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-600" style={{ width: `${Math.min(100, (homeGymMonthlyCount / 8) * 100)}%` }} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1 text-[10px]">
+                  {[1, 2, 3].map(m => <span key={m} className={`px-2 py-1 rounded ${m === Math.max(getCurrentPhase('home'), getCurrentPhase('gym')) ? 'bg-blue-700 text-white' : 'bg-white text-blue-600'}`}>M{m}</span>)}
+                </div>
+              </div>
+              
+              <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-2xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Flame size={18} className="text-emerald-600" />
+                  <p className="text-sm font-bold text-emerald-900">Corrida</p>
+                </div>
+                <p className="text-3xl font-black text-emerald-900">{runMonthlyCount} / 4</p>
+                <p className="text-xs text-emerald-600 mt-1">meta mensal de corrida</p>
+                <div className="mt-3 h-2 bg-emerald-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-600" style={{ width: `${Math.min(100, (runMonthlyCount / 4) * 100)}%` }} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1 text-[10px]">
+                  {[1, 2, 3].map(m => <span key={m} className={`px-2 py-1 rounded ${m === getCurrentPhase('run') ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-600'}`}>M{m}</span>)}
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section>
-          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Activity className="text-blue-500" />
-            Treinos do Mês
-          </h2>
-          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-bold text-gray-800">Meta: 8 treinos (2/semana)</span>
-              <span className="text-sm font-bold text-gray-600">
-                {workoutLogs.filter(l => {
-                  const logDate = new Date(l.timestamp);
-                  const now = new Date();
-                  return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear();
-                }).length} / 8
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all" 
-                style={{ width: `${Math.min(100, (workoutLogs.filter(l => {
-                  const logDate = new Date(l.timestamp);
-                  const now = new Date();
-                  return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear();
-                }).length / 8) * 100)}%` }}
-              ></div>
-            </div>
-          </div>
-        </section>
       </div>
     );
   };
@@ -783,7 +806,7 @@ export default function App() {
     };
 
     const getPlannedModalityForDate = (date) => {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = normalizeDateKey(date);
       if (monthlyPlan[dateStr] !== undefined) {
         return monthlyPlan[dateStr];
       }
@@ -794,13 +817,16 @@ export default function App() {
       const upcoming = [];
       const today = new Date();
       const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const modalityFutureCount = {};
       while (upcoming.length < count) {
-        cursor.setDate(cursor.getDate() + 1);
         const modality = getPlannedModalityForDate(cursor);
-        if (modality) {
-          const workout = getUpcomingWorkoutForModality(modality);
+        if (modality && !hasLoggedWorkoutForDate(cursor)) {
+          const futureIndex = modalityFutureCount[modality] || 0;
+          const workout = getUpcomingWorkoutForModality(modality, futureIndex);
           upcoming.push({ date: new Date(cursor), modality, workout });
+          modalityFutureCount[modality] = futureIndex + 1;
         }
+        cursor.setDate(cursor.getDate() + 1);
         if ((cursor - today) / 86400000 > 30) break;
       }
       return upcoming;
@@ -883,7 +909,7 @@ export default function App() {
               <div className="space-y-2">
                 <button 
                   onClick={() => {
-                     const dateStr = selectedDateForModal.toISOString().split('T')[0];
+                     const dateStr = normalizeDateKey(selectedDateForModal);
                      saveMonthlyPlan({ ...monthlyPlan, [dateStr]: '' });
                      setSelectedDateForModal(null);
                   }}
@@ -898,7 +924,7 @@ export default function App() {
                     <button 
                       key={mod.id}
                       onClick={() => {
-                         const dateStr = selectedDateForModal.toISOString().split('T')[0];
+                         const dateStr = normalizeDateKey(selectedDateForModal);
                          saveMonthlyPlan({ ...monthlyPlan, [dateStr]: mod.id });
                          setSelectedDateForModal(null);
                       }}
@@ -928,7 +954,7 @@ export default function App() {
                 const mod = MODALITIES.find(m => m.id === item.modality);
                 return (
                   <div key={idx} className="bg-gray-50 p-4 rounded-3xl border border-gray-100">
-                    <div className="flex items-center justify-between mb-3 gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-3">
                       <div className="flex items-center gap-3">
                         <div className={`p-3 rounded-2xl ${mod?.color || 'bg-gray-400'} text-white`}>
                           {mod ? React.createElement(mod.icon, { size: 18 }) : <Dumbbell size={18} />}
@@ -938,7 +964,10 @@ export default function App() {
                           <p className="text-xs text-gray-500">{item.date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-black uppercase text-gray-500">Mês {item.workout.phase}</span>
+                      <div className="flex flex-col items-start sm:items-end gap-1">
+                        <span className="text-[10px] font-black uppercase text-gray-500">Mês {item.workout.phase}</span>
+                        <span className="text-[10px] font-bold uppercase text-blue-600">{item.workout.label}</span>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {(item.workout.exercises || []).slice(0, 2).map((ex, exIdx) => (
