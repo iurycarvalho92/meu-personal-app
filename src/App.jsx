@@ -46,76 +46,6 @@ const db = getFirestore(app);
 const appId = firebaseConfig.appId;
 
 
-// --- Gemini API Setup ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "COLOQUE_AQUI_SUA_API_KEY"; // Runtime provides the key
-
-// Rate Limiting Logic (6 requests per minute)
-const geminiRequestTimestamps = [];
-const enforceRateLimit = async () => {
-  const MAX_REQUESTS_PER_MINUTE = 6;
-  const MINUTE_IN_MS = 60000;
-  
-  while (true) {
-    const now = Date.now();
-    // Clean up old timestamps
-    while (geminiRequestTimestamps.length > 0 && now - geminiRequestTimestamps[0] >= MINUTE_IN_MS) {
-      geminiRequestTimestamps.shift();
-    }
-    
-    if (geminiRequestTimestamps.length < MAX_REQUESTS_PER_MINUTE) {
-      geminiRequestTimestamps.push(Date.now());
-      return;
-    }
-    
-    // Need to wait. Calculate time until the oldest request expires
-    const timeToWait = MINUTE_IN_MS - (now - geminiRequestTimestamps[0]);
-    console.warn(`Gemini rate limit (6/min) reached. Waiting ${timeToWait}ms...`);
-    // Add a small buffer (100ms) to ensure we pass the 1-minute mark
-    await new Promise(resolve => setTimeout(resolve, timeToWait + 100));
-  }
-};
-
-const callGemini = async (prompt, systemPrompt = "Você é um personal trainer expert.") => {
-  await enforceRateLimit();
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;  
-  const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
-    systemInstruction: { parts: [{ text: systemPrompt }] }
-  };
-
-  const fetchWithBackoff = async (retries = 0) => {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const errorMsg = errorData?.error?.message || 'API Error';
-        const err = new Error(errorMsg);
-        err.status = response.status;
-        throw err;
-      }
-      return await response.json();
-    } catch (err) {
-      // Do not retry on client errors like 400 (Bad Request/Expired Key) or 404 (Model Not Found)
-      if (err.status >= 400 && err.status < 500) {
-        console.error("Gemini API Error:", err.message);
-        throw err;
-      }
-      if (retries < 3) {
-        await new Promise(res => setTimeout(res, Math.pow(2, retries) * 1000));
-        return fetchWithBackoff(retries + 1);
-      }
-      throw err;
-    }
-  };
-
-  const result = await fetchWithBackoff();
-  return result.candidates?.[0]?.content?.parts?.[0]?.text;
-};
-
 // --- Data Constants ---
 const MODALITIES = [
   { id: 'home', name: 'Em Casa', icon: Home, color: 'bg-blue-500' },
@@ -213,16 +143,9 @@ export default function App() {
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiPlannerLoading, setAiPlannerLoading] = useState(false);
-  const [aiCalendarLoading, setAiCalendarLoading] = useState(false);
-  const [bonusAiLoading, setBonusAiLoading] = useState(false);
-  const [aiInsight, setAiInsight] = useState("");
-  const [calendarSuggestion, setCalendarSuggestion] = useState("");
   const [workoutTimer, setWorkoutTimer] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [swapLoadingIdx, setSwapLoadingIdx] = useState(null);
   const [workoutEffort, setWorkoutEffort] = useState(null);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -314,8 +237,6 @@ export default function App() {
     setCustomWorkouts({});
     setWorkoutLogs([]);
     setCurrentWorkout(null);
-    setAiInsight("");
-    setCalendarSuggestion("");
     setActiveTab('dashboard');
     // Force reload to ensure clean state
     window.location.reload();
@@ -362,178 +283,6 @@ export default function App() {
 
     return () => { unsubProfile(); unsubPlan(); unsubCustom(); unsubLogs(); };
   }, [user]);
-
-  // --- AI Actions ---
-  const generateAiWorkout = async (modalityId) => {
-    setAiLoading(true);
-    try {
-      const phase = getCurrentPhase(modalityId);
-      const programBase = PROGRAMS[modalityId][phase];
-      const mod = MODALITIES.find(m => m.id === modalityId);
-      
-      const prompt = `Atue como personal trainer. O usuário é um homem de 34 anos, voltando de inatividade. 
-      Ele está na Fase ${phase} do programa de ${mod.name}. 
-      O objetivo desta fase é: "${programBase.title} - ${programBase.desc}".
-      A estrutura base atual é: ${JSON.stringify(programBase.exercises)}.
-      
-      TAREFA: Gere uma VARIAÇÃO deste treino. Mantenha a mesma estrutura lógica e foco, mas substitua os exercícios por equivalentes para trazer variedade e não cair na rotina. Duração alvo: 30-45min.
-      Retorne APENAS um JSON neste formato, sem formatação markdown ou texto extra: 
-      [{"name": "nome do exercicio", "sets": 3, "reps": "10-12"}]`;
-      
-      const responseText = await callGemini(prompt, "Você responde apenas com JSON válido.");
-      const cleanedText = responseText.replace(/```json|```/g, "").trim();
-      const newExercises = JSON.parse(cleanedText);
-      
-      const key = `${modalityId}_${phase}`;
-      const updatedCustom = { ...customWorkouts, [key]: newExercises };
-      setCustomWorkouts(updatedCustom);
-      
-      if (user) {
-        const customRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'customWorkouts');
-        await setDoc(customRef, updatedCustom);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Não foi possível gerar a variação no momento. Tente novamente.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const analyzeProgress = async () => {
-    setAiLoading(true);
-    try {
-      const recentLogs = workoutLogs.slice(0, 5).map(l => ({
-        data: new Date(l.timestamp).toLocaleDateString(),
-        modalidade: l.modalityId,
-        exercicios: l.exercises.map(e => `${e.name}: ${e.weight}kg x ${e.actualReps}reps`)
-      }));
-      
-      const prompt = `Analise meu progresso recente e dê 3 dicas práticas para melhorar: ${JSON.stringify(recentLogs)}`;
-      const insight = await callGemini(prompt, "Você é um analista de performance fitness motivador. Seja conciso (max 300 caracteres).");
-      setAiInsight(insight);
-    } catch (error) {
-      console.error(error);
-      setAiInsight("Não consegui analisar agora. Continue treinando!");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const getDailyTip = async () => {
-    if (aiInsight) return;
-    setAiLoading(true);
-    try {
-      const tip = await callGemini("Dê uma dica de saúde ou fitness rápida para hoje para um coordenador de comunicação de 34 anos focado em fitness geral, que tem agenda cheia.");
-      setAiInsight(tip);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const generateAiWeeklyPlan = async () => {
-    setAiPlannerLoading(true);
-    try {
-      const prompt = `Atue como um personal trainer. O usuário é um coordenador de comunicação com agenda cheia e treina APENAS 1 a 2 vezes por semana.
-      As modalidades disponíveis são: 'home' (Em Casa), 'gym' (Academia), 'run' (Corrida), 'footvolley' (Futevôlei).
-      Crie um plano semanal distribuindo 2 dias de treino espaçados (ex: Terça e Quinta, ou Quarta e Sábado).
-      Retorne APENAS um JSON onde as chaves são os índices dos dias (0=Domingo, 1=Segunda... 6=Sábado) e os valores são os IDs das modalidades escolhidas.
-      Exemplo de saída desejada: {"2": "gym", "5": "run"}. NÃO inclua dias de descanso no JSON.`;
-      
-      const responseText = await callGemini(prompt, "Você responde apenas com JSON válido.");
-      const cleanedText = responseText.replace(/```json|```/g, "").trim();
-      const newPlan = JSON.parse(cleanedText);
-      
-      await saveWeeklyPlan(newPlan);
-      setWeeklyPlan(newPlan); // Optmistic update
-    } catch (err) {
-      console.error("Erro ao gerar plano:", err);
-      alert("Não foi possível gerar o plano. Tente novamente.");
-    } finally {
-      setAiPlannerLoading(false);
-    }
-  };
-
-  const generateAiCalendarSuggestion = async () => {
-    setAiCalendarLoading(true);
-    try {
-      const recent = workoutLogs.slice(0, 4).map(l => MODALITIES.find(m => m.id === l.modalityId)?.name || 'Treino').join(", ");
-      const prompt = `O usuário treina 1-2x por semana. Histórico dos últimos 4 treinos: [${recent}]. 
-      Considerando isso, sugira qual modalidade (Academia, Corrida, Em Casa ou Futevôlei) ele deve priorizar nesta semana para manter um condicionamento equilibrado. 
-      Seja direto, motivador e mencione a profissão dele (coordenador de comunicação) sutilmente para incentivar a descompressão. Máximo 2 frases.`;
-      
-      const suggestion = await callGemini(prompt);
-      setCalendarSuggestion(suggestion);
-    } catch (err) {
-      console.error(err);
-      setCalendarSuggestion("Mantenha a constância! Qualquer treino hoje é melhor do que nenhum.");
-    } finally {
-      setAiCalendarLoading(false);
-    }
-  };
-
-  const addBonusExercise = async () => {
-    if (!currentWorkout) return;
-    setBonusAiLoading(true);
-    try {
-      const mod = MODALITIES.find(m => m.id === currentWorkout.modalityId);
-      const currentExNames = currentWorkout.exercises.map(e => e.name).join(', ');
-      const prompt = `Atue como personal trainer de um coordenador de comunicação ocupado que precisa libertar stress. 
-      Ele está no meio de um treino de ${mod?.name || 'Geral'} (Fase ${currentWorkout.phase || 1}). 
-      Exercícios já feitos/planeados: ${currentExNames}.
-      Sugira APENAS UM exercício BÓNUS final (ex: um 'finisher' divertido, um desafio rápido de core ou para aliviar a tensão do dia a dia).
-      Retorne APENAS um JSON válido neste formato: {"name": "nome do exercicio", "sets": 2, "reps": "..."}`;
-      
-      const responseText = await callGemini(prompt, "Você responde apenas com JSON válido.");
-      const cleanedText = responseText.replace(/```json|```/g, "").trim();
-      const bonusEx = JSON.parse(cleanedText);
-      
-      setCurrentWorkout(prev => ({
-        ...prev,
-        exercises: [...prev.exercises, { ...bonusEx, weight: '', actualReps: '', completed: false, isBonus: true }]
-      }));
-    } catch (err) {
-      console.error("Erro ao gerar exercício bónus:", err);
-      // Fallback in case of failure so the user still gets a bonus
-      setCurrentWorkout(prev => ({
-        ...prev,
-        exercises: [...prev.exercises, { name: 'Prancha Máxima (Até tremer!)', sets: 1, reps: 'Falha', weight: '', actualReps: '', completed: false, isBonus: true }]
-      }));
-    } finally {
-      setBonusAiLoading(false);
-    }
-  };
-
-  const swapExercise = async (index) => {
-    if (!currentWorkout) return;
-    setSwapLoadingIdx(index);
-    try {
-      const exToSwap = currentWorkout.exercises[index];
-      const prompt = `Atue como personal trainer. O usuário precisa de uma alternativa para o exercício "${exToSwap.name}" porque não sabe fazer ou não tem o aparelho disponível. O objetivo é manter o mesmo grupo muscular e intenção (séries: ${exToSwap.sets}, reps: ${exToSwap.reps}).
-      Retorne APENAS um JSON válido neste formato: {"name": "nome do exercicio alternativo", "sets": ${exToSwap.sets}, "reps": "${exToSwap.reps}"}`;
-      
-      const responseText = await callGemini(prompt, "Você responde apenas com JSON válido.");
-      if (!responseText) {
-        throw new Error("A IA retornou uma resposta vazia. Tente novamente.");
-      }
-      const cleanedText = responseText.replace(/```json|```/g, "").trim();
-      const newEx = JSON.parse(cleanedText);
-      
-      const newExercises = [...currentWorkout.exercises];
-      newExercises[index] = { 
-        ...newExercises[index], 
-        name: newEx.name, 
-        sets: newEx.sets, 
-        reps: newEx.reps 
-      };
-      setCurrentWorkout(prev => ({ ...prev, exercises: newExercises }));
-    } catch (err) {
-      console.error("Erro ao trocar exercício:", err);
-      alert(`Não foi possível gerar uma alternativa agora. Erro: ${err.message}`);
-    } finally {
-      setSwapLoadingIdx(null);
-    }
-  };
 
   // --- Base Actions ---
   const saveProfile = async (e) => {
@@ -585,7 +334,6 @@ export default function App() {
     });
     setCurrentWorkout(null);
     setWorkoutEffort(null);
-    setAiInsight(""); // Clear insight to trigger new tip
     setActiveTab('history');
   };
 
@@ -703,34 +451,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="mt-6 p-4 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl text-white shadow-md relative overflow-hidden">            <Sparkles className="absolute -right-2 -top-2 opacity-20 w-24 h-24 rotate-12" />
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2">
-                <BrainCircuit size={18} />
-                <span className="text-xs font-bold uppercase tracking-wider">Insight da IA</span>
-              </div>
-              {aiLoading && !aiInsight ? (
-                <div className="h-10 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-white rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:0.4s]" />
-                </div>
-              ) : (
-                <p className="text-sm font-medium leading-relaxed italic">
-                  {aiInsight || "Preparado para o treino? Clique aqui para uma dica rápida entre reuniões."}
-                </p>
-              )}
-              {!aiInsight && !aiLoading && (
-                <button 
-                  onClick={getDailyTip}
-                  className="mt-3 text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition"
-                >
-                  ✨ Obter Dica
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
+          </header>
 
         <section>
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
@@ -826,16 +547,8 @@ export default function App() {
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
           <div className="flex justify-between items-start mb-2">
             <h2 className="text-xl font-bold text-gray-800">Cronograma Semanal</h2>
-            <button 
-              onClick={generateAiWeeklyPlan}
-              disabled={aiPlannerLoading}
-              className="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 transition disabled:opacity-50"
-            >
-              {aiPlannerLoading ? <Activity size={14} className="animate-spin" /> : <Wand2 size={14} />}
-              Auto-Planejar IA
-            </button>
           </div>
-          <p className="text-sm text-gray-500 mb-6">Agende os seus treinos da semana de acordo com a sua disponibilidade, ou peça à IA para distribuir 2 sessões otimizadas.</p>
+          <p className="text-sm text-gray-500 mb-6">Agende os seus treinos da semana de acordo com a sua disponibilidade.</p>
           
           <div className="space-y-3">
             {WEEK_DAYS.map((day, index) => {
@@ -941,31 +654,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* AI Customization */}
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Sparkles size={64} />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">✨ Variar Exercícios com IA</h3>
-          <p className="text-sm text-gray-500 mb-4">Gere novos exercícios mantendo a estrutura lógica do seu Mês Atual (para não enjoar da rotina).</p>
-          <div className="grid grid-cols-2 gap-3">
-            {['gym', 'home', 'run'].map(modId => {
-              const m = MODALITIES.find(m => m.id === modId);
-              return (
-                <button
-                  key={m.id}
-                  disabled={aiLoading}
-                  onClick={() => generateAiWorkout(m.id)}
-                  className="flex items-center justify-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition text-sm font-bold text-blue-700 disabled:opacity-50"
-                >
-                  {aiLoading ? <Activity size={16} className="animate-spin" /> : <BrainCircuit size={16} />}
-                  {m.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+              </div>
     );
   };
 
@@ -1054,14 +743,6 @@ export default function App() {
                 <div className="pr-2 flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-gray-800 text-lg leading-tight">{ex.name}</h3>
-                    <button 
-                      onClick={() => swapExercise(idx)}
-                      disabled={swapLoadingIdx === idx || ex.completed}
-                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition disabled:opacity-50"
-                      title="Trocar exercício por outro semelhante"
-                    >
-                      <RefreshCw size={16} className={swapLoadingIdx === idx ? 'animate-spin text-blue-500' : ''} />
-                    </button>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-2">
                     <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-tighter">
@@ -1102,24 +783,8 @@ export default function App() {
                   />
                 </div>
               </div>
-              {ex.isBonus && (
-                <div className="mt-3 bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-1.5 rounded-lg uppercase text-center flex items-center justify-center gap-1.5">
-                  <Sparkles size={14} /> Desafio Bónus da IA
-                </div>
-              )}
             </div>
           ))}
-        </div>
-
-        <div className="flex justify-center mt-6 mb-8">
-          <button
-            onClick={addBonusExercise}
-            disabled={bonusAiLoading}
-            className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-6 py-3 rounded-2xl font-bold hover:bg-indigo-100 transition disabled:opacity-50 shadow-sm active:scale-95"
-          >
-            {bonusAiLoading ? <Activity size={18} className="animate-spin" /> : <Sparkles size={18} />}
-            {bonusAiLoading ? 'A preparar o desafio...' : 'Pedir Desafio Bónus à IA'}
-          </button>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm mb-24">
@@ -1161,27 +826,9 @@ export default function App() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-800">Evolução</h2>
-          <button 
-            onClick={analyzeProgress}
-            disabled={aiLoading || workoutLogs.length === 0}
-            className="text-xs bg-indigo-600 text-white px-4 py-2 rounded-full font-bold flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-50 shadow-md"
-          >
-            {aiLoading ? <Activity size={14} className="animate-spin" /> : <BrainCircuit size={14} />}
-            ✨ Analisar com IA
-          </button>
         </div>
 
-        {aiInsight && activeTab === 'history' && (
-          <div className="bg-indigo-50 border-2 border-indigo-100 p-5 rounded-3xl text-indigo-900 shadow-inner">
-            <div className="flex items-center gap-2 mb-2">
-              <Lightbulb className="text-indigo-600" size={20} />
-              <span className="font-bold text-sm uppercase tracking-wide">Análise Tática</span>
-            </div>
-            <p className="text-sm italic leading-relaxed">{aiInsight}</p>
-          </div>
-        )}
-        
-        {workoutLogs.length === 0 ? (
+                {workoutLogs.length === 0 ? (
           <div className="bg-white p-10 rounded-3xl border border-gray-100 text-center">
             <p className="text-gray-400">Nenhum registro encontrado. Inicie seu primeiro treino!</p>
           </div>
@@ -1240,38 +887,6 @@ export default function App() {
     return (
       <div className="space-y-6">
         
-        {/* AI Suggestion Card */}
-        <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
-          <Sparkles className="absolute -right-4 -top-4 opacity-10 w-32 h-32 rotate-12" />
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <BrainCircuit size={20} className="text-indigo-200" />
-                <h3 className="font-bold text-sm uppercase tracking-wide text-indigo-100">O que treinar a seguir?</h3>
-              </div>
-              <button 
-                onClick={generateAiCalendarSuggestion}
-                disabled={aiCalendarLoading}
-                className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition disabled:opacity-50"
-              >
-                <Wand2 size={16} />
-              </button>
-            </div>
-            
-            {aiCalendarLoading ? (
-               <div className="h-10 flex items-center gap-2">
-                 <div className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce" />
-                 <div className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce [animation-delay:0.2s]" />
-                 <div className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce [animation-delay:0.4s]" />
-               </div>
-            ) : (
-              <p className="text-sm font-medium leading-relaxed">
-                {calendarSuggestion || "Toque na varinha mágica para a IA analisar o seu histórico recente e sugerir o próximo passo."}
-              </p>
-            )}
-          </div>
-        </div>
-
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-bold capitalize">{monthName}</h2>
@@ -1356,7 +971,7 @@ export default function App() {
           <Dumbbell size={64} className="text-white" />
         </div>
         <div className="space-y-2">
-            <h1 className="text-3xl font-black text-gray-800 tracking-tight">Personal.ai</h1>
+            <h1 className="text-3xl font-black text-gray-800 tracking-tight">Personal</h1>
             <p className="text-gray-500 font-medium">Sua evolução fitness, guiada por inteligência.</p>
         </div>
         <button 
