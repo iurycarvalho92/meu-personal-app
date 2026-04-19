@@ -58,11 +58,137 @@ const WEEK_DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 
 
 
 const SUBSTITUTES = {
-  'Pernas': ['Subida no Degrau (Step-up)', 'Agachamento Isométrico na Parede (45s)'],
-  'Posterior': ['Ponte de Glúteo Unilateral', 'Flexão Nórdica Reversa'],
-  'Costas': ['Remada Alta na Polia', 'Crucifixo Inverso com Halteres'],
-  'Peito/Ombro': ['Crucifixo com Halteres', 'Elevação Lateral de Ombros'],
-  'Core': ['Escalador (Mountain Climber)', 'Abdominal Infra (Elevação de pernas)']
+  'Agachamento': [
+    'Step-up (Subida no Degrau)',
+    'Agachamento Isométrico na Parede',
+    'Agachamento com Bola na Parede',
+    'Cadeira (Chair)',
+    'Agachamento com Banda Elástica'
+  ],
+  'Afundo': [
+    'Ponte de Glúteo Unilateral',
+    'Agachamento Búlgaro',
+    'Afundo Reverso',
+    'Agachamento com Bola Suíça',
+    'Step Alternado'
+  ],
+  'Elevação Pélvica': [
+    'Agachamento Isométrico',
+    'Ponte Glúteo Bilateral',
+    'Elevação Pélvica com Haltere',
+    'Glute Bridge com Tempo',
+    'Monster Walks'
+  ],
+  'Puxada / Remada': [
+    'Remada Alta na Polia',
+    'Crucifixo Inverso com Halteres',
+    'Remada Curvada com Halteres',
+    'Puxada Lateral Baixa',
+    'Remada Serrote (Unilateral)',
+    'Face Pull na Polia',
+    'Band Rows (Banda Elástica)',
+    'Remada Isométrica'
+  ],
+  'Prancha / Core': [
+    'Escalador (Mountain Climber)',
+    'Abdominal Infra (Elevação de pernas)',
+    'Prancha Lateral',
+    'Dead Bug',
+    'Bird Dog',
+    'Rotação de Tronco na Parede',
+    'Paloff Press (Polia)',
+    'Hollow Body Hold'
+  ],
+  'Supino': [
+    'Crucifixo com Halteres',
+    'Elevação Lateral de Ombros',
+    'Push-ups / Flexão de Braço',
+    'Supino Inclinado',
+    'Supino Declinado',
+    'Chest Fly (Máquina)',
+    'Supino Smith'
+  ],
+  'Desenvolvimento Ombro': [
+    'Desenvolvimento Articulado (Smith)',
+    'Elevação Lateral com Halteres',
+    'Elevação Frontal com Halteres',
+    'Elevação Lateral com Banda',
+    'Pike Push-ups',
+    'Handstand Hold (Parede)'
+  ],
+  'Tríceps': [
+    'Tríceps Francês com Halter',
+    'Mergulho (Dip) no Banco',
+    'Tríceps Polia Corda',
+    'Tríceps Máquina',
+    'Tríceps com Banda Elástica',
+    'Flexão Diamante',
+    'Skull Crusher'
+  ],
+  'Agachamento Sumô': [
+    'Agachamento Aberto',
+    'Step Lateral',
+    'Monster Walks com Banda',
+    'Agachamento Padrão',
+    'Leg Press'
+  ],
+  'Stiff': [
+    'Bom Dia (Good Morning)',
+    'Levantamento Terra Romênio (RDL)',
+    'Stiff Smith',
+    'Elevação Pélvica Unilateral',
+    'Glute-Ham Raise'
+  ],
+  'Agachamento Búlgaro': [
+    'Afundo com Altura',
+    'Leg Press Unilateral',
+    'Agachamento com Bola Suíça',
+    'Hack Squat',
+    'V-Squat'
+  ],
+  'Face Pull': [
+    'Remada Curvada Alta',
+    'Reverse Pec Deck',
+    'Elevação Posterior com Halteres',
+    'Encolhimento de Ombros Reverso',
+    'Remada Alta na Polia'
+  ],
+  'Perdigueiro': [
+    'Flexão Dinâmica com Toque Cruzado',
+    'Escalador (Mountain Climber)',
+    'Burpee',
+    'Step Lateral Dinâmico',
+    'Boxe Dinâmico'
+  ],
+  'Flexão': [
+    'Flexão Inclinada',
+    'Flexão Diamante',
+    'Flexão com Pé Elevado',
+    'Flexão de Parede',
+    'Machine Chest Press',
+    'Barra Assistida'
+  ],
+  'Remada Serrote': [
+    'Remada Unilateral com Haltere',
+    'Remada Unilateral Polia',
+    'Remada Kugelberg',
+    'Single Arm Dumbbell Row',
+    'Landmine Rows'
+  ],
+  'Thruster': [
+    'Agachamento + Desenvolvimento (Split)',
+    'Clean and Press',
+    'Kettlebell Thruster',
+    'Dumbbell Clean and Press',
+    'Power Clean and Press'
+  ],
+  'Russian Twist': [
+    'Rotação de Tronco na Polia',
+    'Rotação Sentado na Máquina',
+    'Rotação com Haltere Russo',
+    'Paloff Press Dinâmico',
+    'Rotação com Banda Elástica'
+  ]
 };
 
 const FUNNY_PHRASES = [
@@ -155,6 +281,7 @@ export default function App() {
   const [editingLogData, setEditingLogData] = useState(null);
   const [customWorkouts, setCustomWorkouts] = useState({}); // Stores AI overrides keyed by "modalityId_phase"
   const [workoutLogs, setWorkoutLogs] = useState([]);
+  const [expandedLogIds, setExpandedLogIds] = useState(new Set()); // Track expanded log cards
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -1437,6 +1564,20 @@ export default function App() {
       }
     };
 
+    const toggleExpand = (logId) => {
+      const newExpanded = new Set(expandedLogIds);
+      if (newExpanded.has(logId)) {
+        newExpanded.delete(logId);
+      } else {
+        newExpanded.add(logId);
+      }
+      setExpandedLogIds(newExpanded);
+    };
+
+    const getTopExercises = (log) => {
+      return log.exercises.slice(0, 2);
+    };
+
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-2">
@@ -1451,77 +1592,151 @@ export default function App() {
         ) : (
           workoutLogs.map((log) => {
             const isEditing = editingLogId === log.id;
+            const isExpanded = expandedLogIds.has(log.id);
+            const topExercises = getTopExercises(log);
+            const totalVolume = log.exercises.reduce((total, ex) => {
+              if (Array.isArray(ex.setDetails) && ex.setDetails.length) {
+                return total + ex.setDetails.reduce((sum, set) => sum + (Number(set.weight) * Number(set.reps) || 0), 0);
+              }
+              return total + (Number(ex.weight) * Number(ex.actualReps) || 0);
+            }, 0);
+
             return (
-              <div key={log.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl ${MODALITIES.find(m => m.id === log.modalityId)?.color || 'bg-yellow-500'} text-white`}>
-                      {React.createElement(MODALITIES.find(m => m.id === log.modalityId)?.icon || Zap, { size: 16 })}
+              <div key={log.id} className={`bg-white rounded-2xl border border-gray-100 shadow-sm transition-all overflow-hidden ${isExpanded ? 'p-5' : 'p-4'}`}>
+                {/* Header - Always Visible */}
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className={`p-2 rounded-xl ${MODALITIES.find(m => m.id === log.modalityId)?.color || 'bg-yellow-500'} text-white flex-shrink-0`}>
+                      {React.createElement(MODALITIES.find(m => m.id === log.modalityId)?.icon || Zap, { size: 18 })}
                     </div>
-                    <div>
-                      <span className="font-bold text-gray-800 block">{MODALITIES.find(m => m.id === log.modalityId)?.name || 'Treino Expresso'}</span>
-                      {log.phase && <span className="text-[10px] font-bold text-blue-500 uppercase">Mês {log.phase}</span>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-gray-800 text-sm">{MODALITIES.find(m => m.id === log.modalityId)?.name || 'Treino'}</span>
+                        {log.phase && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Mês {log.phase}</span>}
+                        {log.points && <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">{log.points} pts</span>}
+                      </div>
+                      <span className="text-[11px] text-gray-400 block mt-0.5">{new Date(log.timestamp).toLocaleDateString('pt-BR')}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-xs font-bold text-gray-400">{new Date(log.timestamp).toLocaleDateString('pt-BR')}</span>
-                    <div className="flex gap-2">
-                      {!isEditing && <button onClick={() => { setEditingLogId(log.id); setEditingLogData(log); }} className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 uppercase">Editar</button>}
-                      <button onClick={() => handleDeleteLog(log.id)} className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded hover:bg-red-100 uppercase"><Trash2 size={12}/></button>
-                    </div>
+                  <button 
+                    onClick={() => toggleExpand(log.id)}
+                    className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition flex-shrink-0 ml-2"
+                    title={isExpanded ? "Recolher" : "Expandir"}
+                  >
+                    {isExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+                  </button>
+                </div>
+
+                {/* Summary - Always Visible */}
+                <div className="grid grid-cols-3 gap-2 mb-3 text-center text-xs">
+                  <div className="bg-blue-50 rounded-lg p-2">
+                    <span className="text-blue-700 font-bold block">{log.exercises.length}</span>
+                    <span className="text-blue-500 text-[9px]">Exercícios</span>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2">
+                    <span className="text-green-700 font-bold block">{totalVolume.toFixed(0)}kg</span>
+                    <span className="text-green-500 text-[9px]">Volume</span>
+                  </div>
+                  <div className="bg-orange-50 rounded-lg p-2">
+                    <span className="text-orange-700 font-bold block">{Math.floor(log.durationSeconds / 60)}m</span>
+                    <span className="text-orange-500 text-[9px]">Duração</span>
                   </div>
                 </div>
-                
-                <div className="space-y-2 mt-2">
-                  {isEditing ? (
-                    <div className="space-y-3">
-                      {editingLogData.exercises.map((ex, i) => (
-                        <div key={i} className="flex gap-2 text-sm items-center">
-                           <span className="w-1/2 text-gray-600 font-medium truncate" title={ex.name}>{ex.name}</span>
-                           <input type="text" className="w-16 p-1 bg-gray-50 border rounded text-center text-xs" value={ex.weight} onChange={e => {
-                             const newEx = [...editingLogData.exercises];
-                             newEx[i].weight = e.target.value;
-                             setEditingLogData({...editingLogData, exercises: newEx});
-                           }} placeholder="Kg" />
-                           <span className="text-gray-400">×</span>
-                           <input type="number" className="w-16 p-1 bg-gray-50 border rounded text-center text-xs" value={ex.actualReps} onChange={e => {
-                             const newEx = [...editingLogData.exercises];
-                             newEx[i].actualReps = e.target.value;
-                             setEditingLogData({...editingLogData, exercises: newEx});
-                           }} placeholder="Reps" />
-                        </div>
-                      ))}
-                      <div className="flex justify-end gap-2 mt-3 pt-3 border-t">
-                        <button onClick={() => setEditingLogId(null)} className="px-3 py-1.5 text-xs font-bold text-gray-500 bg-gray-100 rounded-lg">Cancelar</button>
-                        <button onClick={handleUpdateLog} className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg shadow-sm">Salvar</button>
-                      </div>
+
+                {/* Top Exercises Preview - Always Visible */}
+                <div className="space-y-1.5 mb-3 border-t border-gray-50 pt-3">
+                  {topExercises.map((ex, i) => (
+                    <div key={i} className="flex justify-between items-center text-xs">
+                      <span className="text-gray-600 font-medium truncate flex-1">{ex.name}</span>
+                      <span className="text-gray-400 text-[10px] whitespace-nowrap ml-2">
+                        {ex.setDetails && ex.setDetails.length 
+                          ? `${ex.setDetails.length} séries`
+                          : `${ex.sets}x${ex.reps}`}
+                      </span>
                     </div>
-                  ) : (
-                    log.exercises.map((ex, i) => (
-                      <div key={i} className="space-y-2 py-2 border-b border-gray-50 last:border-0">
-                        <div className="flex justify-between items-start gap-3">
-                          <span className="text-gray-600 font-medium">{ex.name}</span>
-                          <span className="text-[10px] font-semibold uppercase text-gray-400">{ex.sets}x {ex.reps}</span>
-                        </div>
-                        {(ex.setDetails && ex.setDetails.length) ? (
-                          <div className="grid gap-2">
-                            {ex.setDetails.map((set, setIdx) => (
-                              <div key={setIdx} className="flex items-center justify-between rounded-2xl bg-gray-50 p-2 text-xs font-bold text-gray-600">
-                                <span>Série {setIdx + 1}</span>
-                                <span>{set.weight || 0}kg × {set.reps || 0}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex justify-between items-center text-sm text-gray-500">
-                            <span>{ex.weight ? `${ex.weight}kg` : 'BW'}</span>
-                            <span>{ex.actualReps || '0'} reps</span>
-                          </div>
-                        )}
-                      </div>
-                    ))
+                  ))}
+                  {log.exercises.length > 2 && (
+                    <div className="text-xs text-blue-500 font-semibold pt-1">
+                      +{log.exercises.length - 2} exercícios
+                    </div>
                   )}
                 </div>
+
+                {/* Expandable Details */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 pt-4 space-y-3">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        {editingLogData.exercises.map((ex, i) => (
+                          <div key={i} className="flex gap-2 text-xs items-center bg-gray-50 p-2 rounded-lg">
+                            <span className="flex-1 text-gray-600 font-medium truncate" title={ex.name}>{ex.name}</span>
+                            <input type="text" className="w-12 p-1 bg-white border border-gray-200 rounded text-center text-xs" value={ex.weight} onChange={e => {
+                              const newEx = [...editingLogData.exercises];
+                              newEx[i].weight = e.target.value;
+                              setEditingLogData({...editingLogData, exercises: newEx});
+                            }} placeholder="Kg" />
+                            <span className="text-gray-400">×</span>
+                            <input type="number" className="w-12 p-1 bg-white border border-gray-200 rounded text-center text-xs" value={ex.actualReps} onChange={e => {
+                              const newEx = [...editingLogData.exercises];
+                              newEx[i].actualReps = e.target.value;
+                              setEditingLogData({...editingLogData, exercises: newEx});
+                            }} placeholder="Reps" />
+                          </div>
+                        ))}
+                        <div className="flex justify-end gap-2 mt-3 pt-3 border-t">
+                          <button onClick={() => setEditingLogId(null)} className="px-3 py-1.5 text-xs font-bold text-gray-500 bg-gray-100 rounded-lg">Cancelar</button>
+                          <button onClick={handleUpdateLog} className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg">Salvar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {log.exercises.map((ex, i) => (
+                          <div key={i} className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
+                            <div className="flex justify-between items-start gap-2">
+                              <span className="font-bold text-gray-700">{ex.name}</span>
+                              <span className="text-gray-400 font-semibold">{ex.sets}x{ex.reps}</span>
+                            </div>
+                            {(ex.setDetails && ex.setDetails.length) ? (
+                              <div className="grid grid-cols-2 gap-1">
+                                {ex.setDetails.map((set, setIdx) => (
+                                  <div key={setIdx} className="flex items-center justify-between rounded bg-white p-1.5 text-[9px] font-bold text-gray-600 border border-gray-100">
+                                    <span>Sér.{setIdx + 1}</span>
+                                    <span>{set.weight || 0}kg×{set.reps || 0}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex justify-between text-[10px] text-gray-500 bg-white p-1.5 rounded border border-gray-100">
+                                <span>{ex.weight ? `${ex.weight}kg` : 'BW'}</span>
+                                <span>{ex.actualReps || '0'} reps</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-3 border-t">
+                      {!isEditing && (
+                        <>
+                          <button 
+                            onClick={() => { setEditingLogId(log.id); setEditingLogData(log); }} 
+                            className="flex-1 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition"
+                          >
+                            Editar
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteLog(log.id)} 
+                            className="flex-1 text-xs font-bold text-red-600 bg-red-50 px-3 py-2 rounded-lg hover:bg-red-100 transition"
+                          >
+                            Apagar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })
