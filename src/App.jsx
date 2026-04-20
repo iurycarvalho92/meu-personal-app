@@ -201,6 +201,85 @@ const FUNNY_PHRASES = [
   "Levanta e vai, o shape não vem pelo correio!"
 ];
 
+// --- Exercise Muscle Groups Mapping ---
+const EXERCISE_MUSCLES = {
+  // Pernas e Glúteos
+  'Agachamento com Halteres': ['Quadríceps', 'Glúteos', 'Posterior'],
+  'Agachamento Sumô com Halter': ['Quadríceps', 'Glúteos', 'Adutores'],
+  'Agachamento Búlgaro': ['Quadríceps', 'Glúteos'],
+  'Afundo Alternado (Peso do corpo)': ['Quadríceps', 'Glúteos'],
+  'Step-up (Subida no Degrau)': ['Quadríceps', 'Glúteos'],
+  'Agachamento Isométrico na Parede': ['Quadríceps'],
+  'Step Alternado': ['Quadríceps', 'Glúteos'],
+  'Cadeira (Chair)': ['Quadríceps'],
+  
+  // Posterior de Coxa e Glúteos
+  'Stiff com Halteres': ['Posterior', 'Glúteos'],
+  'Elevação Pélvica (Costas na Bola)': ['Glúteos', 'Posterior'],
+  'Ponte de Glúteo Unilateral': ['Glúteos', 'Posterior'],
+  'Ponte Glúteo Bilateral': ['Glúteos', 'Posterior'],
+  'Levantamento Terra Romênio (RDL)': ['Posterior', 'Glúteos'],
+  'Bom Dia (Good Morning)': ['Posterior', 'Glúteos'],
+  'Monster Walks': ['Glúteos', 'Adutores'],
+  
+  // Costas e Lats
+  'Puxada Frontal na Polia Alta': ['Costas', 'Lats'],
+  'Puxada / Remada': ['Costas', 'Lats'],
+  'Remada Curvada com Halteres': ['Costas', 'Lats', 'Bíceps'],
+  'Remada Alta na Polia': ['Costas', 'Posterior de Ombro'],
+  'Face Pull na Polia Alta': ['Costas', 'Posterior de Ombro'],
+  'Remada Serrote (Unilateral)': ['Costas', 'Lats'],
+  'Crucifixo Inverso com Halteres': ['Costas', 'Posterior de Ombro'],
+  'Remada Unilateral com Haltere': ['Costas', 'Lats'],
+  
+  // Peito
+  'Supino com Halteres (Deitado na Bola)': ['Peito', 'Tríceps', 'Ombro Anterior'],
+  'Supino': ['Peito', 'Tríceps'],
+  'Push-ups / Flexão de Braço': ['Peito', 'Tríceps'],
+  'Crucifixo com Halteres': ['Peito'],
+  'Chest Fly (Máquina)': ['Peito'],
+  'Flexão Inclinada': ['Peito'],
+  'Flexão Diamante': ['Tríceps', 'Peito'],
+  
+  // Ombros
+  'Desenvolvimento de Ombros em pé': ['Ombro', 'Tríceps'],
+  'Desenvolvimento Ombro': ['Ombro'],
+  'Elevação Lateral de Ombros': ['Ombro Lateral'],
+  'Elevação Frontal com Halteres': ['Ombro Anterior'],
+  'Thruster (Agachamento + Desenv.)': ['Ombro', 'Quadríceps', 'Tríceps'],
+  'Pike Push-ups': ['Ombro', 'Peito'],
+  
+  // Tríceps
+  'Tríceps na Polia Alta': ['Tríceps'],
+  'Tríceps Francês com Halter': ['Tríceps'],
+  'Mergulho (Dip) no Banco': ['Tríceps', 'Peito'],
+  'Tríceps Polia Corda': ['Tríceps'],
+  'Tríceps com Banda Elástica': ['Tríceps'],
+  'Skull Crusher': ['Tríceps'],
+  
+  // Bíceps
+  'Remada Serrote': ['Bíceps', 'Costas'],
+  'Remada Unilateral / Serrote': ['Bíceps', 'Costas'],
+  
+  // Core
+  'Prancha Isométrica na Bola': ['Core', 'Abdominais'],
+  'Rotação de Tronco na Polia Alta': ['Core', 'Oblíquos'],
+  'Prancha / Core': ['Core'],
+  'Escalador (Mountain Climber)': ['Core', 'Cardio'],
+  'Abdominal Infra (Elevação de pernas)': ['Abdominais', 'Core'],
+  'Prancha Lateral': ['Oblíquos', 'Core'],
+  'Russian Twist na Bola': ['Oblíquos', 'Core'],
+  'Rotação de Tronco na Polia': ['Oblíquos', 'Core'],
+  'Dead Bug': ['Core', 'Abdominais'],
+  'Bird Dog': ['Core', 'Posterior'],
+  'Paloff Press (Polia)': ['Core', 'Oblíquos'],
+  
+  // Perdigueiro/Dinâmico
+  'Perdigueiro Dinâmico': ['Core', 'Cardio', 'Abdominais'],
+  'Burpee': ['Peito', 'Abdominais', 'Cardio'],
+  'Boxe Dinâmico': ['Ombro', 'Peito', 'Cardio']
+};
+
 // --- 3-Month Progression Programs ---
 const STRENGTH_WORKOUTS = [
   // A1: Base e Estabilidade
@@ -270,6 +349,46 @@ const PROGRAMS = {
   }
 };
 
+// --- Helper Functions ---
+const getSmartSubstitutes = (exerciseName) => {
+  const muscles = EXERCISE_MUSCLES[exerciseName] || [];
+  const allSubstitutes = Object.entries(SUBSTITUTES).flatMap(([, subs]) => subs);
+  
+  const smartSubs = allSubstitutes.filter(sub => {
+    const subMuscles = EXERCISE_MUSCLES[sub] || [];
+    const hasCommonMuscles = muscles.some(m => subMuscles.includes(m));
+    return !hasCommonMuscles && sub !== exerciseName;
+  });
+  
+  return smartSubs.slice(0, 5);
+};
+
+const calculateVolumeImproved = (exercises) => {
+  const BW_WEIGHT = 75; // Default BW weight in kg
+  return exercises.reduce((total, ex) => {
+    if (Array.isArray(ex.setDetails) && ex.setDetails.length) {
+      return total + ex.setDetails.reduce((sum, set) => {
+        const weight = set.weight ? Number(set.weight) : BW_WEIGHT;
+        const reps = Number(set.reps) || 0;
+        return sum + (weight * reps);
+      }, 0);
+    } else if (ex.weight || ex.actualReps) {
+      const weight = ex.weight ? Number(ex.weight) : BW_WEIGHT;
+      const reps = Number(ex.actualReps) || 0;
+      return total + (weight * reps);
+    }
+    return total;
+  }, 0);
+};
+
+const calculatePace = (timeMinutes, distanceKm) => {
+  if (!timeMinutes || !distanceKm || distanceKm === 0) return '--:--';
+  const paceSeconds = (timeMinutes * 60) / distanceKm;
+  const paceMinutes = Math.floor(paceSeconds / 60);
+  const paceSecondsRemainder = Math.round(paceSeconds % 60);
+  return `${paceMinutes}:${String(paceSecondsRemainder).padStart(2, '0')}`;
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -282,6 +401,10 @@ export default function App() {
   const [customWorkouts, setCustomWorkouts] = useState({}); // Stores AI overrides keyed by "modalityId_phase"
   const [workoutLogs, setWorkoutLogs] = useState([]);
   const [expandedLogIds, setExpandedLogIds] = useState(new Set()); // Track expanded log cards
+  const [runMode, setRunMode] = useState('planned'); // 'planned' or 'free'
+  const [freeRunData, setFreeRunData] = useState({ time: 0, distance: '' }); // For free run tracking
+  const [savedSequences, setSavedSequences] = useState(0); // Salvas sequence counter
+  const [lastWorkoutDate, setLastWorkoutDate] = useState(null); // Track last workout date
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -327,12 +450,7 @@ export default function App() {
   };
 
   const calculateVolume = (log) => {
-    return (log.exercises || []).reduce((total, ex) => {
-      if (Array.isArray(ex.setDetails) && ex.setDetails.length) {
-        return total + ex.setDetails.reduce((sum, set) => sum + (Number(set.weight) * Number(set.reps) || 0), 0);
-      }
-      return total + (Number(ex.weight) * Number(ex.actualReps) || 0);
-    }, 0);
+    return calculateVolumeImproved(log.exercises || []);
   };
 
   const getWorkoutPoints = (log) => {
@@ -394,6 +512,22 @@ export default function App() {
     return maxStreak;
   };
 
+  const getStrengthVsCardioCount = () => {
+    const thisMonth = new Date();
+    const strength = workoutLogs.filter(l => {
+      const logDate = new Date(l.timestamp);
+      // If workoutType is not set, infer from modalityId
+      const workoutType = l.workoutType || (['home', 'gym'].includes(l.modalityId) ? 'força' : 'cardio');
+      return workoutType === 'força' && logDate.getMonth() === thisMonth.getMonth() && logDate.getFullYear() === thisMonth.getFullYear();
+    }).length;
+    const cardio = workoutLogs.filter(l => {
+      const logDate = new Date(l.timestamp);
+      // If workoutType is not set, infer from modalityId
+      const workoutType = l.workoutType || (['home', 'gym'].includes(l.modalityId) ? 'força' : 'cardio');
+      return workoutType === 'cardio' && logDate.getMonth() === thisMonth.getMonth() && logDate.getFullYear() === thisMonth.getFullYear();
+    }).length;
+    return { strength, cardio };
+  };
 
   const getUpcomingWorkoutSequence = (modalityId, count = 2) => {
     const phase = getCurrentPhase(modalityId);
@@ -622,29 +756,96 @@ export default function App() {
       alert("Por favor, avalie o esforço do treino antes de finalizar.");
       return;
     }
+
+    // Validações específicas por tipo
+    if (currentWorkout.modalityId === 'run' && runMode === 'free') {
+      if (!freeRunData.distance || freeRunData.distance <= 0) {
+        alert("Por favor, insira a distância percorrida.");
+        return;
+      }
+      if (!freeRunData.time || freeRunData.time <= 0) {
+        alert("Por favor, insira o tempo em minutos.");
+        return;
+      }
+    }
+
+    if (currentWorkout.modalityId === 'footvolley') {
+      if (!freeRunData.time || freeRunData.time <= 0) {
+        alert("Por favor, insira a duração da sessão.");
+        return;
+      }
+    }
+
     setIsTimerRunning(false);
     const logsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'workoutLogs');
-    const totalCompleted = currentWorkout.exercises.filter(e => e.completed).length;
-    const durationSeconds = workoutTimer;
-    const volume = currentWorkout.exercises.reduce((total, ex) => {
-      if (Array.isArray(ex.setDetails) && ex.setDetails.length) {
-        return total + ex.setDetails.reduce((sum, set) => sum + (Number(set.weight) * Number(set.reps) || 0), 0);
+    
+    // Determinar duração com base no tipo
+    let durationSeconds;
+    if (currentWorkout.modalityId === 'run' && runMode === 'free') {
+      durationSeconds = Math.round(Number(freeRunData.time) * 60);
+    } else if (currentWorkout.modalityId === 'footvolley') {
+      durationSeconds = Math.round(Number(freeRunData.time) * 60);
+    } else {
+      durationSeconds = workoutTimer;
+    }
+
+    const totalCompleted = currentWorkout.exercises?.filter(e => e.completed).length || 0;
+    const volume = calculateVolumeImproved(currentWorkout.exercises || []);
+    
+    // Calcular sequência (dias consecutivos)
+    let currentStreak = 1;
+    let sequenceIncremented = false;
+    if (lastWorkoutDate) {
+      const lastDate = new Date(lastWorkoutDate).getTime();
+      const today = new Date().getTime();
+      const daysDiff = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+      if (daysDiff === 1) {
+        currentStreak = (workoutLogs.filter(l => {
+          const logDate = new Date(l.timestamp).getTime();
+          const daysDiffFromLast = Math.floor((today - logDate) / (1000 * 60 * 60 * 24));
+          return daysDiffFromLast <= 3;
+        }).length + 1);
+        
+        if (currentStreak % 3 === 0) {
+          setSavedSequences(prev => prev + 1);
+          sequenceIncremented = true;
+        }
       }
-      return total + (Number(ex.weight) * Number(ex.actualReps) || 0);
-    }, 0);
+    }
+
+    const workoutType = ['home', 'gym'].includes(currentWorkout.modalityId) ? 'força' : 'cardio';
     const points = 10 + workoutEffort * 5 + totalCompleted * 2 + Math.floor(volume / 100);
 
-    await addDoc(logsRef, {
+    const workoutData = {
       ...currentWorkout,
       effort: workoutEffort,
       timestamp: Date.now(),
       durationSeconds,
       totalCompleted,
       volume,
-      points
-    });
+      points,
+      workoutType,
+      currentStreak,
+      runMode: currentWorkout.modalityId === 'run' ? runMode : undefined
+    };
+
+    // Se for corrida livre, adicionar dados de distância e pace
+    if (currentWorkout.modalityId === 'run' && runMode === 'free') {
+      workoutData.distance = Number(freeRunData.distance);
+      workoutData.pace = calculatePace(freeRunData.time, freeRunData.distance);
+    }
+
+    // Se ganhou salva sequência, adicionar ao workoutData
+    if (sequenceIncremented) {
+      workoutData.gainedSavedSequence = true;
+    }
+
+    await addDoc(logsRef, workoutData);
     setCurrentWorkout(null);
     setWorkoutEffort(null);
+    setRunMode('planned');
+    setFreeRunData({ time: 0, distance: '' });
+    setLastWorkoutDate(new Date().toISOString());
     setActiveTab('history');
   };
 
@@ -908,6 +1109,49 @@ export default function App() {
                   {[1, 2, 3].map(m => <span key={m} className={`px-2 py-1 rounded ${m === getCurrentPhase('run') ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-600'}`}>M{m}</span>)}
                 </div>
               </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 p-5 rounded-2xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <Target size={20} className="text-purple-600" />
+                  <p className="text-sm font-bold text-purple-900">Distribuição Mensal</p>
+                </div>
+                {(() => {
+                  const { strength, cardio } = getStrengthVsCardioCount();
+                  return (
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-bold text-purple-700">💪 Força</span>
+                          <span className="text-sm font-black text-purple-900">{strength}</span>
+                        </div>
+                        <div className="h-2 bg-purple-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-purple-600" style={{ width: `${Math.min(100, (strength / 8) * 100)}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-bold text-pink-700">🏃 Cardio</span>
+                          <span className="text-sm font-black text-pink-900">{cardio}</span>
+                        </div>
+                        <div className="h-2 bg-pink-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-pink-600" style={{ width: `${Math.min(100, (cardio / 4) * 100)}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {savedSequences > 0 && (
+                <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-300 p-5 rounded-2xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles size={20} className="text-yellow-600 animate-pulse" />
+                    <p className="text-sm font-bold text-yellow-900">Salvas de Sequência</p>
+                  </div>
+                  <p className="text-4xl font-black text-yellow-600 text-center">{savedSequences}</p>
+                  <p className="text-[10px] text-yellow-700 text-center mt-2">dias de descanso sem quebrar sequência</p>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -1126,11 +1370,11 @@ export default function App() {
           
           {MODALITIES.filter(m => m.id !== 'footvolley').map(mod => {
             const logsForMod = workoutLogs.filter(l => l.modalityId === mod.id).sort((a,b) => a.timestamp - b.timestamp);
-            const upcoming = getUpcomingWorkoutForModality(mod.id);
-            const upcomingSequence = getUpcomingWorkoutSequence(mod.id, 2);
+            const upcomingSequence = getUpcomingWorkoutSequence(mod.id, 3); // Get 3 future workouts
             
             const handleAddExercise = async () => {
               if (!user) return;
+              const upcoming = upcomingSequence[0];
               const key = `${mod.id}_${upcoming.phase}`;
               const newExercises = [...upcoming.exercises, { name: 'Novo Exercício', sets: 3, reps: '10' }];
               const newCustom = { ...customWorkouts, [key]: newExercises };
@@ -1141,6 +1385,7 @@ export default function App() {
 
             const saveCustomExerciseName = async (index, newName) => {
               if (!user) return;
+              const upcoming = upcomingSequence[0];
               const key = `${mod.id}_${upcoming.phase}`;
               const newExercises = [...upcoming.exercises];
               newExercises[index] = { ...newExercises[index], name: newName };
@@ -1153,6 +1398,7 @@ export default function App() {
 
             const handleRemoveExercise = async (index) => {
               if (!user) return;
+              const upcoming = upcomingSequence[0];
               const key = `${mod.id}_${upcoming.phase}`;
               const newExercises = [...upcoming.exercises];
               newExercises.splice(index, 1);
@@ -1161,6 +1407,108 @@ export default function App() {
               const customRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'customWorkouts');
               await setDoc(customRef, newCustom);
             };
+
+            return (
+              <div key={mod.id} className="space-y-3">
+                <div className="flex items-center gap-2 px-2">
+                  <div className={`p-1.5 rounded-lg ${mod.color} text-white`}><mod.icon size={16} /></div>
+                  <h3 className="font-black text-gray-800">{mod.name}</h3>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{upcomingSequence.length} próximos</span>
+                </div>
+                
+                <div className="flex overflow-x-auto pb-4 -mx-4 px-4 gap-4 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  
+                  {/* Past Workouts */}
+                  {logsForMod.map((log) => (
+                    <div key={log.id} className="w-[260px] min-w-[260px] bg-white rounded-3xl border border-gray-100 shadow-sm snap-center flex-shrink-0 flex flex-col opacity-75 grayscale-[0.3]">
+                      <div className="p-4 bg-gray-50 rounded-t-3xl border-b border-gray-100 flex items-center justify-between">
+                         <span className="font-bold text-gray-600 text-sm">Feito: {new Date(log.timestamp).toLocaleDateString('pt-BR')}</span>
+                         <CheckCircle2 size={16} className="text-green-500" />
+                      </div>
+                      <div className="p-4 flex-1 space-y-2">
+                        {log.exercises.slice(0, 3).map((ex, i) => (
+                           <div key={i} className="text-xs text-gray-500 truncate">• {ex.name}</div>
+                        ))}
+                        {log.exercises.length > 3 && <div className="text-xs text-gray-400 font-medium italic">+{log.exercises.length - 3} exercícios</div>}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Next 3 Workouts */}
+                  {upcomingSequence.slice(0, 3).map((upcoming, seqIdx) => (
+                    <div key={seqIdx} className={'w-[300px] min-w-[300px] bg-gradient-to-br from-white to-gray-50 rounded-3xl border-2 snap-center flex-shrink-0 flex flex-col relative overflow-hidden ' + (seqIdx === 0 ? 'border-blue-300 shadow-lg' : 'border-blue-200 shadow-md')}>
+                      {seqIdx === 0 && <div className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-full shadow-lg z-10 animate-bounce">🎯 PRÓXIMO</div>}
+                      <div className={`p-4 rounded-b-2xl ${mod.color} text-white flex items-center justify-between`}>
+                         <span className="font-black text-lg">{mod.name}</span>
+                         <span className="text-sm font-black uppercase bg-white/30 backdrop-blur px-3 py-1 rounded-full">Mês {upcoming.phase}</span>
+                      </div>
+                      
+                      <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-cyan-50 border-b-2 border-blue-100">
+                        <div className="flex flex-wrap gap-1">
+                          {upcomingSequence.slice(0, 3).map((item, idx) => (
+                            <span key={idx} className="text-[9px] font-bold text-blue-700 bg-white rounded-full px-2.5 py-0.5 border border-blue-200">
+                              {idx === 0 ? '▶' : ''} {idx === seqIdx ? '●' : '○'} {item.exercises.length}ex
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 flex-1 space-y-2 overflow-y-auto max-h-64">
+                         {upcoming.exercises.map((ex, i) => (
+                           <div key={i} className="flex items-center gap-2 bg-white p-2.5 rounded-lg border border-gray-100 hover:border-blue-200 transition group">
+                             <div className="flex-1 min-w-0">
+                               {editingWorkout === 'edit_' + mod.id + '_' + i ? (
+                                 <input type="text" className="w-full text-xs font-bold text-gray-800 bg-blue-50 border border-blue-300 rounded px-2 py-1 focus:outline-blue-500" value={ex.name} onChange={(e) => {
+                                      const newExercises = [...upcoming.exercises];
+                                      newExercises[i] = { ...newExercises[i], name: e.target.value };
+                                      setCustomWorkouts({ ...customWorkouts, [`${mod.id}_${upcoming.phase}`]: newExercises });
+                                 }} />
+                               ) : (
+                                 <>
+                                   <span className="font-bold text-gray-800 text-xs block leading-tight">{ex.name}</span>
+                                   <span className="text-[9px] text-gray-500 font-semibold">{ex.sets}x{ex.reps}</span>
+                                 </>
+                               )}
+                             </div>
+                             {seqIdx === 0 && (
+                               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                                 {editingWorkout === 'edit_' + mod.id + '_' + i ? (
+                                   <button onClick={() => saveCustomExerciseName(i, ex.name)} className="p-1 bg-green-50 text-green-600 rounded hover:bg-green-100"><CheckCircle2 size={12}/></button>
+                                 ) : (
+                                   <button onClick={() => setEditingWorkout('edit_' + mod.id + '_' + i)} className="p-1 bg-blue-50 text-blue-500 rounded hover:bg-blue-100"><Wand2 size={12}/></button>
+                                 )}
+                                 <button onClick={() => handleRemoveExercise(i)} className="p-1 bg-red-50 text-red-500 rounded hover:bg-red-100"><Trash2 size={12}/></button>
+                               </div>
+                             )}
+                           </div>
+                         ))}
+                         {upcoming.exercises.length === 0 && (
+                           <div className="text-center py-4 text-gray-400">
+                             <p className="text-xs">Nenhum exercício</p>
+                           </div>
+                         )}
+                      </div>
+
+                      <div className="p-3 border-t border-gray-100 bg-white space-y-2">
+                        {seqIdx === 0 && (
+                          <button onClick={handleAddExercise} className="w-full py-1.5 border border-dashed border-blue-300 rounded-lg text-blue-600 text-[10px] font-bold hover:bg-blue-50 flex items-center justify-center gap-1">
+                            <Plus size={12} /> Exercício
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => startWorkout(mod.id)}
+                          className={`w-full ${mod.color} text-white font-bold py-3 rounded-xl hover:opacity-90 active:scale-95 transition shadow-sm flex items-center justify-center gap-2`}
+                        >
+                          {seqIdx === 0 ? 'Iniciar Agora' : 'Proximos'} <Play size={16} fill="currentColor" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
 
             return (
               <div key={mod.id} className="space-y-3">
@@ -1187,84 +1535,94 @@ export default function App() {
                     </div>
                   ))}
 
-                  {/* Next Workout */}
-                  <div className={`w-[300px] min-w-[300px] bg-white rounded-3xl border-2 ${mod.color.replace('bg-', 'border-').replace('500', '200')} shadow-md snap-center flex-shrink-0 flex flex-col relative`}>
-                    <div className="absolute -top-2 -right-1 bg-blue-500 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-sm z-10 animate-bounce">A SEGUIR</div>
-                    <div className={`p-4 rounded-t-2xl ${mod.color} text-white flex items-center justify-between`}>
-                       <span className="font-bold">Treino Atual</span>
-                       <span className="text-[10px] font-black uppercase bg-white/20 px-2 py-1 rounded-md">Mês {upcoming.phase}</span>
-                    </div>
-                    <div className="px-4 py-3 border-b border-white/20 text-[10px] text-white/80 bg-white/5">
-                      <div className="flex flex-wrap gap-2">
-                        {upcomingSequence.map((item, idx) => (
-                          <span key={idx} className="rounded-full bg-white/15 px-2 py-1">
-                            {idx === 0 ? 'Próximo' : 'Depois'} • {item.exercises.length} exer{item.exercises.length === 1 ? 'cício' : 'cios'}
-                          </span>
-                        ))}
+                  {/* Next 3 Workouts */}
+                  {upcomingSequence.slice(0, 3).map((upcoming, seqIdx) => (
+                    <div key={seqIdx} className={`w-[300px] min-w-[300px] bg-gradient-to-br from-white to-gray-50 rounded-3xl border-2 ${seqIdx === 0 ? 'border-blue-300 shadow-lg' : 'border-blue-200 shadow-md'} snap-center flex-shrink-0 flex flex-col relative overflow-hidden`}>
+                      {seqIdx === 0 && <div className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-full shadow-lg z-10 animate-bounce">🎯 PRÓXIMO</div>}
+                      <div className={`p-4 rounded-b-2xl ${mod.color} text-white flex items-center justify-between`}>
+                         <span className="font-black text-lg">{mod.name}</span>
+                         <span className="text-sm font-black uppercase bg-white/30 backdrop-blur px-3 py-1 rounded-full">Mês {upcoming.phase}</span>
                       </div>
-                    </div>
-                    <div className="p-4 flex-1 space-y-3">
-                       {upcoming.exercises.map((ex, i) => (
-                         <div key={i} className="flex flex-col bg-gray-50 p-3 rounded-xl border border-gray-100">
-                           <div className="flex items-start justify-between gap-2">
-                             <div className="flex flex-col w-full">
-                               {editingWorkout === `${mod.id}_${i}` ? (
-                                 <input type="text" className="w-full text-sm font-bold text-gray-800 bg-white border border-gray-200 rounded px-2 py-1 mb-1 focus:outline-blue-500" value={ex.name} onChange={(e) => {
-                                    const newExercises = [...upcoming.exercises];
-                                    newExercises[i] = { ...newExercises[i], name: e.target.value };
-                                    setCustomWorkouts({ ...customWorkouts, [`${mod.id}_${upcoming.phase}`]: newExercises });
+                      
+                      <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-cyan-50 border-b-2 border-blue-100">
+                        <div className="flex flex-wrap gap-1">
+                          <span className="text-[9px] font-bold text-blue-700 bg-white rounded-full px-2.5 py-0.5 border border-blue-200">
+                            <span className="font-black">{seqIdx === 0 ? '▶' : '#' + seqIdx}</span> {upcoming.exercises.length}ex
+                          </span>
+                          <span className="text-[9px] font-bold text-blue-700 bg-white rounded-full px-2.5 py-0.5 border border-blue-200">
+                            {upcoming.label}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 flex-1 space-y-2 overflow-y-auto max-h-64">
+                         {upcoming.exercises.map((ex, i) => (
+                           <div key={i} className="flex items-center gap-2 bg-white p-2.5 rounded-lg border border-gray-100 hover:border-blue-200 transition group">
+                             <div className="flex-1 min-w-0">
+                               {editingWorkout === (mod.id + '_' + seqIdx + '_' + i) ? (
+                                 <input type="text" className="w-full text-xs font-bold text-gray-800 bg-blue-50 border border-blue-300 rounded px-2 py-1 focus:outline-blue-500" value={ex.name} onChange={(e) => {
+                                      const newExercises = [...upcoming.exercises];
+                                      newExercises[i] = { ...newExercises[i], name: e.target.value };
+                                      // Update in state - will need to handle this differently
                                  }} />
                                ) : (
-                                 <span className="font-bold text-gray-800 text-sm leading-tight">{ex.name}</span>
+                                 <>
+                                   <span className="font-bold text-gray-800 text-xs block leading-tight">{ex.name}</span>
+                                   <span className="text-[9px] text-gray-500 font-semibold">{ex.sets}x{ex.reps}</span>
+                                 </>
                                )}
-                               <span className="text-[10px] text-gray-500 font-bold uppercase">{ex.sets}x {ex.reps}</span>
                              </div>
-                             <div className="flex gap-1">
-                               {editingWorkout === `${mod.id}_${i}` ? (
-                                 <button onClick={() => saveCustomExerciseName(i, ex.name)} className="text-[10px] text-green-600 bg-green-50 p-1.5 rounded-lg"><CheckCircle2 size={14}/></button>
-                               ) : (
-                                 <button onClick={() => setEditingWorkout(`${mod.id}_${i}`)} className="text-[10px] text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Wand2 size={14}/></button>
-                               )}
-                               <button onClick={() => handleRemoveExercise(i)} className="text-[10px] text-red-500 bg-red-50 p-1.5 rounded-lg"><Trash2 size={14}/></button>
-                             </div>
-                           </div>
-                           
-                           {editingWorkout === `${mod.id}_${i}` && (
-                             <div className="mt-2 pt-2 border-t border-gray-200">
-                               <p className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wide">Substitutos:</p>
-                               <div className="flex flex-wrap gap-1.5">
-                                 {Object.entries(SUBSTITUTES).flatMap(([, subs]) => 
-                                   subs.map(sub => (
-                                     <button 
-                                       key={sub}
-                                       onClick={() => saveCustomExerciseName(i, sub)}
-                                       className="text-[10px] bg-white border border-gray-200 text-gray-600 px-2 py-1 rounded hover:border-blue-500 hover:text-blue-600 transition text-left"
-                                     >
-                                       {sub}
-                                     </button>
-                                   ))
+                             {seqIdx === 0 && (
+                               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                                 {editingWorkout === (mod.id + '_' + seqIdx + '_' + i) ? (
+                                   <button onClick={() => saveCustomExerciseName(i, ex.name, seqIdx)} className="p-1 bg-green-50 text-green-600 rounded hover:bg-green-100"><CheckCircle2 size={12}/></button>
+                                 ) : (
+                                   <button onClick={() => setEditingWorkout(mod.id + '_' + seqIdx + '_' + i)} className="p-1 bg-blue-50 text-blue-500 rounded hover:bg-blue-100"><Wand2 size={12}/></button>
                                  )}
+                                 <button onClick={() => handleRemoveExercise(i, seqIdx)} className="p-1 bg-red-50 text-red-500 rounded hover:bg-red-100"><Trash2 size={12}/></button>
                                </div>
-                             </div>
-                           )}
-                         </div>
-                       ))}
-                       <button onClick={handleAddExercise} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 text-xs font-bold hover:bg-gray-50 hover:text-gray-700 flex items-center justify-center gap-1 transition">
-                         <Plus size={14} /> Adicionar Exercício
-                       </button>
-                    </div>
+                             )}
+                           </div>
+                         ))}
+                         {upcoming.exercises.length === 0 && (
+                           <div className="text-center py-4 text-gray-400">
+                             <p className="text-xs">Nenhum exercício</p>
+                           </div>
+                         )}
+                      </div>
 
-                    <div className="p-4 border-t border-gray-50">
-                      <button 
-                        onClick={() => startWorkout(mod.id)}
-                        className={`w-full ${mod.color} text-white font-bold py-3 rounded-xl hover:opacity-90 active:scale-95 transition shadow-sm flex items-center justify-center gap-2`}
-                      >
-                        Iniciar Agora <Play size={16} fill="currentColor" />
-                      </button>
-                    </div>
-                  </div>
+                      {seqIdx === 0 && editingWorkout && editingWorkout.startsWith(mod.id) && (
+                        <div className="px-4 py-3 bg-blue-50 border-t border-blue-200">
+                          <p className="text-[9px] font-bold text-blue-700 mb-2 uppercase">✨ Substitutos</p>
+                          <div className="flex flex-wrap gap-1">
+                            {getSmartSubstitutes(upcoming.exercises.find((_, i) => editingWorkout === (mod.id + '_0_' + i))?.name || '').slice(0, 4).map(sub => (
+                              <button 
+                                key={sub}
+                                onClick={() => saveCustomExerciseName(parseInt(editingWorkout.split('_')[2]), sub, 0)}
+                                className="text-[8px] bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded font-semibold hover:bg-blue-100"
+                              >
+                                {sub}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-                </div>
+                      <div className="p-3 border-t border-gray-100 bg-white space-y-2">
+                        {seqIdx === 0 && (
+                          <button onClick={handleAddExercise} className="w-full py-1.5 border border-dashed border-blue-300 rounded-lg text-blue-600 text-[10px] font-bold hover:bg-blue-50 flex items-center justify-center gap-1">
+                            <Plus size={12} /> Exercício
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => startWorkout(mod.id)}
+                          className={`w-full ${mod.color} text-white font-bold py-3 rounded-xl hover:opacity-90 active:scale-95 transition shadow-sm flex items-center justify-center gap-2`}
+                        >
+                          {seqIdx === 0 ? 'Iniciar Agora' : ('Ir pro #' + seqIdx)} <Play size={16} fill="currentColor" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
               </div>
             )
           })}
@@ -1369,7 +1727,75 @@ export default function App() {
           </div>
         )}
 
-        <div className="space-y-4 px-1">
+        {/* Run Mode Selection */}
+        {currentWorkout.modalityId === 'run' && (
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm mx-1 flex gap-2">
+            <button
+              onClick={() => setRunMode('planned')}
+              className={`flex-1 py-3 rounded-xl font-bold transition-all ${runMode === 'planned' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >
+              📋 Seguir Plano
+            </button>
+            <button
+              onClick={() => setRunMode('free')}
+              className={`flex-1 py-3 rounded-xl font-bold transition-all ${runMode === 'free' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >
+              🏃 Corrida Livre
+            </button>
+          </div>
+        )}
+
+        {/* Free Run Data Input */}
+        {currentWorkout.modalityId === 'run' && runMode === 'free' && (
+          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 p-4 rounded-2xl border-2 border-orange-200 shadow-sm mx-1 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white p-3 rounded-xl border border-orange-100">
+                <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Tempo (min)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="30"
+                  className="w-full bg-transparent p-0 text-lg font-bold text-gray-800 border-none focus:ring-0 placeholder:text-gray-300"
+                  value={freeRunData.time}
+                  onChange={(e) => setFreeRunData({...freeRunData, time: e.target.value})}
+                />
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-orange-100">
+                <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Distância (km)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="5"
+                  className="w-full bg-transparent p-0 text-lg font-bold text-gray-800 border-none focus:ring-0 placeholder:text-gray-300"
+                  value={freeRunData.distance}
+                  onChange={(e) => setFreeRunData({...freeRunData, distance: e.target.value})}
+                />
+              </div>
+            </div>
+            {freeRunData.time && freeRunData.distance && (
+              <div className="bg-white p-3 rounded-xl border border-orange-200 text-center">
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Pace</p>
+                <p className="text-xl font-black text-orange-600">{calculatePace(freeRunData.time, freeRunData.distance)}/km</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Futevolei Duration Input */}
+        {currentWorkout.modalityId === 'footvolley' && (
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm mx-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase mb-2 block">⏱️ Duração da Sessão (min)</label>
+            <input
+              type="number"
+              placeholder="60"
+              className="w-full bg-gray-50 p-3 rounded-xl border border-gray-200 text-lg font-bold text-gray-800 focus:border-blue-500 focus:outline-none"
+              value={freeRunData.time}
+              onChange={(e) => setFreeRunData({...freeRunData, time: e.target.value})}
+            />
+          </div>
+        )}
+
+        <div className="space-y-4 px-1 mt-4">
           {currentWorkout.exercises.map((ex, idx) => (
             
             <div key={idx} className={`p-5 rounded-3xl border-2 transition-all ${ex.completed ? 'bg-green-50 border-green-200 opacity-75 scale-95' : 'bg-white border-gray-100 shadow-sm'}`}>
@@ -1424,23 +1850,24 @@ export default function App() {
               
               {editingWorkout === `logger_${idx}` && (
                  <div className="mb-4 pt-2 border-t border-gray-100">
-                   <p className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wide">Substitutos:</p>
+                   <p className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wide">✨ Substitutos Complementares:</p>
                    <div className="flex flex-wrap gap-1.5">
-                     {Object.entries(SUBSTITUTES).flatMap(([, subs]) => 
-                       subs.map(sub => (
+                     {getSmartSubstitutes(currentWorkout.exercises[idx].name).map(sub => (
                          <button 
                            key={sub}
                            onClick={() => {
                               updateEx(idx, 'name', sub);
                               setEditingWorkout(null);
                            }}
-                           className="text-[10px] bg-white border border-gray-200 text-gray-600 px-2 py-1 rounded hover:border-blue-500 hover:text-blue-600 transition text-left"
+                           className="text-[10px] bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-300 text-blue-700 px-2.5 py-1 rounded font-semibold hover:from-blue-100 hover:to-blue-200 transition text-left"
                          >
                            {sub}
                          </button>
-                       ))
-                     )}
+                       ))}
                    </div>
+                   {getSmartSubstitutes(currentWorkout.exercises[idx].name).length === 0 && (
+                     <p className="text-[9px] text-gray-400 italic">Nenhum substituto complementar disponível</p>
+                   )}
                  </div>
               )}
 
@@ -1546,12 +1973,56 @@ export default function App() {
     );
   };
 
-  
+  const getRepeatedExercises = () => {
+    const exerciseCount = {};
+    workoutLogs.forEach(log => {
+      (log.exercises || []).forEach(ex => {
+        exerciseCount[ex.name] = (exerciseCount[ex.name] || 0) + 1;
+      });
+    });
+    return Object.entries(exerciseCount).filter(([, count]) => count >= 3).sort((a, b) => b[1] - a[1]);
+  };
+
+  const getExerciseProgression = (exerciseName) => {
+    const logs = workoutLogs
+      .filter(l => (l.exercises || []).some(e => e.name === exerciseName))
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 3);
+    
+    return logs.map(log => {
+      const ex = log.exercises.find(e => e.name === exerciseName);
+      const maxWeight = Array.isArray(ex.setDetails)
+        ? Math.max(...ex.setDetails.map(s => Number(s.weight) || 0), 0)
+        : Number(ex.weight) || 0;
+      return { weight: maxWeight, date: new Date(log.timestamp).toLocaleDateString('pt-BR') };
+    });
+  };
+
+  const getRunProgression = () => {
+    const runs = workoutLogs
+      .filter(l => l.modalityId === 'run' && l.distance)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 3);
+    
+    return runs.map(log => ({
+      distance: log.distance,
+      pace: log.pace,
+      date: new Date(log.timestamp).toLocaleDateString('pt-BR')
+    }));
+  };
+
   const renderHistory = () => {
     const handleUpdateLog = async () => {
       if (!user || !editingLogId || !editingLogData) return;
       const logRef = doc(db, 'artifacts', appId, 'users', user.uid, 'workoutLogs', editingLogId);
-      await updateDoc(logRef, { exercises: editingLogData.exercises });
+      const updateData = { 
+        exercises: editingLogData.exercises,
+        runMode: editingLogData.runMode,
+        distance: editingLogData.distance,
+        pace: editingLogData.pace,
+        durationSeconds: editingLogData.durationSeconds
+      };
+      await updateDoc(logRef, updateData);
       setEditingLogId(null);
       setEditingLogData(null);
     };
@@ -1585,6 +2056,55 @@ export default function App() {
           Seu Histórico
         </h2>
 
+        {/* Highlights Section */}
+        {workoutLogs.length > 0 && (
+          <div className="space-y-3">
+            {getRepeatedExercises().length > 0 && (
+              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-4 rounded-2xl border-2 border-blue-200">
+                <p className="text-xs font-bold text-blue-700 uppercase mb-3">📈 Exercícios Principais</p>
+                <div className="space-y-2">
+                  {getRepeatedExercises().slice(0, 3).map(([name, count]) => {
+                    const progression = getExerciseProgression(name);
+                    const latestWeight = progression[0]?.weight || 0;
+                    const oldestWeight = progression[progression.length - 1]?.weight || latestWeight;
+                    const improvement = latestWeight - oldestWeight;
+                    return (
+                      <div key={name} className="bg-white p-2 rounded-lg text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-gray-800">{name}</span>
+                          <span className="text-blue-600 font-bold">{count}x</span>
+                        </div>
+                        {latestWeight > 0 && (
+                          <div className="flex justify-between items-center mt-1 text-gray-600">
+                            <span>Peso: {latestWeight}kg</span>
+                            {improvement > 0 && <span className="text-green-600 font-bold">+{improvement}kg 🔥</span>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {getRunProgression().length > 0 && (
+              <div className="bg-gradient-to-r from-orange-50 to-red-50 p-4 rounded-2xl border-2 border-orange-200">
+                <p className="text-xs font-bold text-orange-700 uppercase mb-3">🏃 Últimas Corridas</p>
+                <div className="space-y-2">
+                  {getRunProgression().map((run, idx) => (
+                    <div key={idx} className="bg-white p-2 rounded-lg text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-800">{run.distance}km</span>
+                        <span className="text-orange-600 font-bold">{run.pace}/km</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {workoutLogs.length === 0 ? (
           <div className="bg-gray-50 p-8 rounded-3xl border-2 border-dashed border-gray-200 text-center">
             <p className="text-gray-500">Nenhum treino registado ainda.</p>
@@ -1594,12 +2114,7 @@ export default function App() {
             const isEditing = editingLogId === log.id;
             const isExpanded = expandedLogIds.has(log.id);
             const topExercises = getTopExercises(log);
-            const totalVolume = log.exercises.reduce((total, ex) => {
-              if (Array.isArray(ex.setDetails) && ex.setDetails.length) {
-                return total + ex.setDetails.reduce((sum, set) => sum + (Number(set.weight) * Number(set.reps) || 0), 0);
-              }
-              return total + (Number(ex.weight) * Number(ex.actualReps) || 0);
-            }, 0);
+            const totalVolume = calculateVolumeImproved(log.exercises || []);
 
             return (
               <div key={log.id} className={`bg-white rounded-2xl border border-gray-100 shadow-sm transition-all overflow-hidden ${isExpanded ? 'p-5' : 'p-4'}`}>
@@ -1666,26 +2181,141 @@ export default function App() {
                 {isExpanded && (
                   <div className="border-t border-gray-100 pt-4 space-y-3">
                     {isEditing ? (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {editingLogData.exercises.map((ex, i) => (
-                          <div key={i} className="flex gap-2 text-xs items-center bg-gray-50 p-2 rounded-lg">
-                            <span className="flex-1 text-gray-600 font-medium truncate" title={ex.name}>{ex.name}</span>
-                            <input type="text" className="w-12 p-1 bg-white border border-gray-200 rounded text-center text-xs" value={ex.weight} onChange={e => {
-                              const newEx = [...editingLogData.exercises];
-                              newEx[i].weight = e.target.value;
-                              setEditingLogData({...editingLogData, exercises: newEx});
-                            }} placeholder="Kg" />
-                            <span className="text-gray-400">×</span>
-                            <input type="number" className="w-12 p-1 bg-white border border-gray-200 rounded text-center text-xs" value={ex.actualReps} onChange={e => {
-                              const newEx = [...editingLogData.exercises];
-                              newEx[i].actualReps = e.target.value;
-                              setEditingLogData({...editingLogData, exercises: newEx});
-                            }} placeholder="Reps" />
+                          <div key={i} className="bg-gradient-to-r from-blue-50 to-cyan-50 p-3 rounded-lg border border-blue-200 text-xs space-y-2">
+                            <div className="flex gap-2 items-start">
+                              <div className="flex-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Exercício</label>
+                                <input type="text" className="w-full p-2 bg-white border border-blue-200 rounded text-sm font-bold text-gray-800" value={ex.name} onChange={e => {
+                                  const newEx = [...editingLogData.exercises];
+                                  newEx[i].name = e.target.value;
+                                  setEditingLogData({...editingLogData, exercises: newEx});
+                                }} />
+                              </div>
+                              <button onClick={() => {
+                                const newEx = [...editingLogData.exercises];
+                                newEx.splice(i, 1);
+                                setEditingLogData({...editingLogData, exercises: newEx});
+                              }} className="text-red-500 hover:bg-red-50 p-2 rounded" title="Remover">✕</button>
+                            </div>
+                            
+                            {/* Series Details */}
+                            <div className="bg-white p-2 rounded border border-blue-100">
+                              <div className="flex justify-between items-center mb-2">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Séries</label>
+                                <button onClick={() => {
+                                  const newEx = [...editingLogData.exercises];
+                                  newEx[i].setDetails.push({ weight: '', reps: '', completed: false });
+                                  setEditingLogData({...editingLogData, exercises: newEx});
+                                }} className="text-blue-600 text-[10px] font-bold">+ Adicionar</button>
+                              </div>
+                              <div className="space-y-1.5">
+                                {(ex.setDetails || []).map((set, setIdx) => (
+                                  <div key={setIdx} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-center">
+                                    <div>
+                                      <input type="number" className="w-full p-1 bg-gray-100 border border-gray-200 rounded text-center text-xs" value={set.weight} onChange={e => {
+                                        const newEx = [...editingLogData.exercises];
+                                        newEx[i].setDetails[setIdx].weight = e.target.value;
+                                        setEditingLogData({...editingLogData, exercises: newEx});
+                                      }} placeholder="Kg" />
+                                    </div>
+                                    <div>
+                                      <input type="number" className="w-full p-1 bg-gray-100 border border-gray-200 rounded text-center text-xs" value={set.reps} onChange={e => {
+                                        const newEx = [...editingLogData.exercises];
+                                        newEx[i].setDetails[setIdx].reps = e.target.value;
+                                        setEditingLogData({...editingLogData, exercises: newEx});
+                                      }} placeholder="Reps" />
+                                    </div>
+                                    <button onClick={() => {
+                                      const newEx = [...editingLogData.exercises];
+                                      newEx[i].setDetails.splice(setIdx, 1);
+                                      setEditingLogData({...editingLogData, exercises: newEx});
+                                    }} className="text-red-500 text-[10px] font-bold">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         ))}
+                        
+                        <button onClick={() => {
+                          const newEx = [...editingLogData.exercises, {
+                            name: 'Novo Exercício',
+                            sets: 3,
+                            reps: '12',
+                            weight: '',
+                            actualReps: '',
+                            completed: false,
+                            setDetails: [{ weight: '', reps: '', completed: false }]
+                          }];
+                          setEditingLogData({...editingLogData, exercises: newEx});
+                        }} className="w-full py-2 border-2 border-dashed border-blue-300 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-50">
+                          + Adicionar Exercício
+                        </button>
+
+                        {/* Duration Field */}
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                          <label className="text-[10px] font-bold text-gray-600 uppercase block mb-2">Duração (minutos)</label>
+                          <input 
+                            type="number" 
+                            className="w-full p-2 bg-white border border-yellow-200 rounded text-sm font-bold text-gray-800" 
+                            value={Math.round((editingLogData.durationSeconds || 0) / 60)}
+                            onChange={(e) => setEditingLogData({...editingLogData, durationSeconds: Math.round(Number(e.target.value) * 60)})}
+                            placeholder="Minutos"
+                          />
+                        </div>
+
+                        {/* Run Mode Settings */}
+                        {['run', 'footvolley'].includes(log.modalityId) && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
+                            <label className="text-[10px] font-bold text-gray-600 uppercase block">Tipo de Treino</label>
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => setEditingLogData({...editingLogData, runMode: 'planned'})}
+                                className={`flex-1 py-2 text-xs font-bold rounded ${editingLogData.runMode === 'planned' ? 'bg-blue-500 text-white' : 'bg-white border border-orange-200 text-gray-700'}`}
+                              >
+                                📋 Plano
+                              </button>
+                              <button 
+                                onClick={() => setEditingLogData({...editingLogData, runMode: 'free'})}
+                                className={`flex-1 py-2 text-xs font-bold rounded ${editingLogData.runMode === 'free' ? 'bg-blue-500 text-white' : 'bg-white border border-orange-200 text-gray-700'}`}
+                              >
+                                🏃 Livre
+                              </button>
+                            </div>
+
+                            {editingLogData.runMode === 'free' && log.modalityId === 'run' && (
+                              <div className="space-y-2 mt-2">
+                                <div>
+                                  <label className="text-[10px] font-bold text-gray-600 uppercase block mb-1">Distância (km)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="w-full p-2 bg-white border border-orange-200 rounded text-sm"
+                                    value={editingLogData.distance || ''}
+                                    onChange={(e) => {
+                                      const newDistance = Number(e.target.value);
+                                      const time = Math.round((editingLogData.durationSeconds || 0) / 60);
+                                      const newPace = newDistance > 0 && time > 0 ? calculatePace(time, newDistance) : '';
+                                      setEditingLogData({...editingLogData, distance: newDistance, pace: newPace});
+                                    }}
+                                    placeholder="km"
+                                  />
+                                </div>
+                                {editingLogData.distance > 0 && (
+                                  <div className="text-[10px] text-gray-600 bg-white p-2 rounded border border-orange-100">
+                                    Pace: <span className="font-bold">{editingLogData.pace || '0:00'} min/km</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
                         <div className="flex justify-end gap-2 mt-3 pt-3 border-t">
                           <button onClick={() => setEditingLogId(null)} className="px-3 py-1.5 text-xs font-bold text-gray-500 bg-gray-100 rounded-lg">Cancelar</button>
-                          <button onClick={handleUpdateLog} className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg">Salvar</button>
+                          <button onClick={handleUpdateLog} className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg">Salvar Tudo</button>
                         </div>
                       </div>
                     ) : (
