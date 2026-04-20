@@ -328,16 +328,16 @@ const PROGRAMS = {
     3: { title: "Mês 3 (Intensidade): Potência", desc: "Reduz o descanso para 30s e faz os movimentos com mais explosão.", workouts: STRENGTH_WORKOUTS }
   },
   run: {
-    1: { title: "Mês 1: Adaptação (Intervalos)", desc: "1 min de Corrida leve / 2 min de Caminhada rápida.", workouts: [
-      [ { name: 'Trote Leve / Caminhada', sets: 8, reps: '1m / 2m' }, { name: 'Tempo Total', sets: 1, reps: '24 min' } ]
+    1: { title: "Mês 1: Adaptação (Intervalos Curtos)", desc: "Alterna entre corrida leve e caminhada. Foco em adaptação cardiovascular.", workouts: [
+      [ { name: 'Trote Leve', sets: 1, reps: '1 min' }, { name: 'Caminhada Rápida', sets: 1, reps: '2 min' }, { name: 'Repetir', sets: 8, reps: '8x' }, { name: 'Tempo Total', sets: 1, reps: '24 min' } ]
     ]},
-    2: { title: "Mês 2: Resistência", desc: "Evolução do tempo de corrida (Semanas 5-8).", workouts: [
-      [ { name: 'Corrida / Caminhada (Sem. 5-6)', sets: 6, reps: '3m / 1m' }, { name: 'Tempo Total', sets: 1, reps: '24 min' } ],
-      [ { name: 'Corrida / Caminhada (Sem. 7-8)', sets: 4, reps: '5m / 1m' }, { name: 'Tempo Total', sets: 1, reps: '24 min' } ]
+    2: { title: "Mês 2: Resistência (Intervalos Longos)", desc: "Aumenta o tempo de corrida. Semanas 5-6 com 3-5 min, Semanas 7-8 com 5 min.", workouts: [
+      [ { name: 'Corrida (3-5 min)', sets: 1, reps: '3-5 min' }, { name: 'Caminhada', sets: 1, reps: '1 min' }, { name: 'Repetir', sets: 6, reps: '6x' }, { name: 'Tempo Total', sets: 1, reps: '24-36 min' } ],
+      [ { name: 'Corrida (5 min)', sets: 1, reps: '5 min' }, { name: 'Caminhada', sets: 1, reps: '1 min' }, { name: 'Repetir', sets: 4, reps: '4x' }, { name: 'Tempo Total', sets: 1, reps: '24 min' } ]
     ]},
-    3: { title: "Mês 3: Performance", desc: "Treino Longo e HIIT.", workouts: [
+    3: { title: "Mês 3: Performance (Contínua + HIIT)", desc: "Treino 1: Corrida contínua no teu ritmo. Treino 2: HIIT com tiros rápidos.", workouts: [
       [ { name: 'Corrida Contínua', sets: 1, reps: '25-30 min no teu ritmo' } ],
-      [ { name: 'Tiro Rápido / Caminhada (HIIT)', sets: 10, reps: '1m / 1m' }, { name: 'Tempo Total', sets: 1, reps: '20 min' } ]
+      [ { name: 'Tiro Rápido', sets: 1, reps: '1 min' }, { name: 'Caminhada de Recuperação', sets: 1, reps: '1 min' }, { name: 'Repetir', sets: 10, reps: '10x' }, { name: 'Tempo Total', sets: 1, reps: '20 min' } ]
     ]}
   },
   footvolley: {
@@ -352,15 +352,19 @@ const PROGRAMS = {
 // --- Helper Functions ---
 const getSmartSubstitutes = (exerciseName) => {
   const muscles = EXERCISE_MUSCLES[exerciseName] || [];
-  const allSubstitutes = Object.entries(SUBSTITUTES).flatMap(([, subs]) => subs);
+  if (muscles.length === 0) return [];
   
-  const smartSubs = allSubstitutes.filter(sub => {
-    const subMuscles = EXERCISE_MUSCLES[sub] || [];
-    const hasCommonMuscles = muscles.some(m => subMuscles.includes(m));
-    return !hasCommonMuscles && sub !== exerciseName;
-  });
+  // Procura por exercícios que trabalham os MESMOS músculos
+  const smartSubs = Object.keys(EXERCISE_MUSCLES)
+    .filter(exName => {
+      if (exName === exerciseName) return false;
+      const exMuscles = EXERCISE_MUSCLES[exName] || [];
+      // Retorna exercícios que têm pelo menos um músculo em comum
+      return muscles.some(m => exMuscles.includes(m));
+    })
+    .slice(0, 6);
   
-  return smartSubs.slice(0, 5);
+  return smartSubs;
 };
 
 const calculateVolumeImproved = (exercises) => {
@@ -527,6 +531,32 @@ export default function App() {
       return workoutType === 'cardio' && logDate.getMonth() === thisMonth.getMonth() && logDate.getFullYear() === thisMonth.getFullYear();
     }).length;
     return { strength, cardio };
+  };
+
+  const getStrengthWorkoutsLast3Weeks = () => {
+    const now = new Date();
+    const threeWeeksAgo = new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000);
+    return workoutLogs.filter(l => {
+      const logDate = new Date(l.timestamp);
+      const workoutType = l.workoutType || (['home', 'gym'].includes(l.modalityId) ? 'força' : 'cardio');
+      return workoutType === 'força' && logDate >= threeWeeksAgo && logDate <= now;
+    }).length;
+  };
+
+  const getLastWeekStrengthStats = () => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const lastWeekLogs = workoutLogs.filter(l => {
+      const logDate = new Date(l.timestamp);
+      const workoutType = l.workoutType || (['home', 'gym'].includes(l.modalityId) ? 'força' : 'cardio');
+      return workoutType === 'força' && logDate >= oneWeekAgo && logDate <= now;
+    });
+    
+    return {
+      count: lastWeekLogs.length,
+      avgExercises: lastWeekLogs.length > 0 ? Math.round(lastWeekLogs.reduce((sum, log) => sum + (log.exercises?.length || 0), 0) / lastWeekLogs.length) : 0,
+      totalExercises: lastWeekLogs.reduce((sum, log) => sum + (log.exercises?.length || 0), 0)
+    };
   };
 
   const getUpcomingWorkoutSequence = (modalityId, count = 2) => {
@@ -1136,6 +1166,38 @@ export default function App() {
                         <div className="h-2 bg-pink-200 rounded-full overflow-hidden">
                           <div className="h-full bg-pink-600" style={{ width: `${Math.min(100, (cardio / 4) * 100)}%` }} />
                         </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 p-5 rounded-2xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <Dumbbell size={20} className="text-blue-600" />
+                  <p className="text-sm font-bold text-blue-900">Força: Progresso</p>
+                </div>
+                {(() => {
+                  const last3Weeks = getStrengthWorkoutsLast3Weeks();
+                  const lastWeek = getLastWeekStrengthStats();
+                  return (
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-blue-700 font-bold">📅 Últimas 3 Semanas</span>
+                          <span className="text-xl font-black text-blue-900">{last3Weeks}</span>
+                        </div>
+                        <p className="text-blue-600 text-[10px]">treinos de força</p>
+                      </div>
+                      <div className="border-t border-blue-100 pt-3 mt-3">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="text-blue-700 font-bold">📊 Última Semana</p>
+                            <p className="text-blue-600 text-[10px]">{lastWeek.count} treinos</p>
+                          </div>
+                          <span className="text-lg font-black text-blue-900">{lastWeek.avgExercises}</span>
+                        </div>
+                        <p className="text-blue-600 text-[10px]">exercícios/treino (média)</p>
                       </div>
                     </div>
                   );
@@ -1893,12 +1955,56 @@ export default function App() {
     }));
   };
 
+  const getPersonalRecords = () => {
+    const records = {};
+    workoutLogs.forEach(log => {
+      (log.exercises || []).forEach(ex => {
+        if (Array.isArray(ex.setDetails)) {
+          ex.setDetails.forEach(set => {
+            const weight = Number(set.weight) || 0;
+            if (weight > 0) {
+              if (!records[ex.name] || weight > records[ex.name].weight) {
+                records[ex.name] = { weight, date: new Date(log.timestamp).toLocaleDateString('pt-BR') };
+              }
+            }
+          });
+        }
+      });
+    });
+    return Object.entries(records).sort((a, b) => b[1].weight - a[1].weight).slice(0, 5);
+  };
+
+  const getBestStrengthExercises = () => {
+    const exercises = {};
+    workoutLogs.forEach(log => {
+      (log.exercises || []).forEach(ex => {
+        if (!exercises[ex.name]) {
+          exercises[ex.name] = { count: 0, maxWeight: 0 };
+        }
+        exercises[ex.name].count += 1;
+        if (Array.isArray(ex.setDetails)) {
+          const maxWeight = Math.max(...ex.setDetails.map(s => Number(s.weight) || 0), 0);
+          exercises[ex.name].maxWeight = Math.max(exercises[ex.name].maxWeight, maxWeight);
+        }
+      });
+    });
+    return Object.entries(exercises)
+      .filter(([, data]) => data.count >= 2)
+      .sort((a, b) => b[1].maxWeight - a[1].maxWeight)
+      .slice(0, 3);
+  };
+
   const renderHistory = () => {
     const handleUpdateLog = async () => {
       if (!user || !editingLogId || !editingLogData) return;
       const logRef = doc(db, 'artifacts', appId, 'users', user.uid, 'workoutLogs', editingLogId);
+      // Ensure exercises have setDetails if missing
+      const processedExercises = editingLogData.exercises.map(ex => ({
+        ...ex,
+        setDetails: ex.setDetails && ex.setDetails.length > 0 ? ex.setDetails : [{ weight: '', reps: '', completed: false }]
+      }));
       const updateData = { 
-        exercises: editingLogData.exercises,
+        exercises: processedExercises,
         runMode: editingLogData.runMode,
         distance: editingLogData.distance,
         pace: editingLogData.pace,
@@ -1984,6 +2090,39 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {getPersonalRecords().length > 0 && (
+              <div className="bg-gradient-to-r from-red-50 to-pink-50 p-4 rounded-2xl border-2 border-red-200">
+                <p className="text-xs font-bold text-red-700 uppercase mb-3">🏆 Recordes Pessoais</p>
+                <div className="space-y-1.5">
+                  {getPersonalRecords().slice(0, 3).map(([name, record]) => (
+                    <div key={name} className="bg-white p-2 rounded-lg text-xs flex justify-between items-center">
+                      <span className="font-bold text-gray-800 flex-1">{name}</span>
+                      <span className="text-red-600 font-black">{record.weight}kg</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {getBestStrengthExercises().length > 0 && (
+              <div className="bg-gradient-to-r from-violet-50 to-purple-50 p-4 rounded-2xl border-2 border-violet-200">
+                <p className="text-xs font-bold text-violet-700 uppercase mb-3">💪 Favoritos de Força</p>
+                <div className="space-y-1.5">
+                  {getBestStrengthExercises().map(([name, data]) => (
+                    <div key={name} className="bg-white p-2 rounded-lg text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-800 flex-1">{name}</span>
+                        <span className="text-violet-600 font-bold text-[10px]">{data.count}x</span>
+                      </div>
+                      {data.maxWeight > 0 && (
+                        <span className="text-violet-500 text-[9px]">Max: {data.maxWeight}kg</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1996,7 +2135,6 @@ export default function App() {
             const isEditing = editingLogId === log.id;
             const isExpanded = expandedLogIds.has(log.id);
             const topExercises = getTopExercises(log);
-            const totalVolume = calculateVolumeImproved(log.exercises || []);
 
             return (
               <div key={log.id} className={`bg-white rounded-2xl border border-gray-100 shadow-sm transition-all overflow-hidden ${isExpanded ? 'p-5' : 'p-4'}`}>
@@ -2025,14 +2163,10 @@ export default function App() {
                 </div>
 
                 {/* Summary - Always Visible */}
-                <div className="grid grid-cols-3 gap-2 mb-3 text-center text-xs">
+                <div className="grid grid-cols-2 gap-2 mb-3 text-center text-xs">
                   <div className="bg-blue-50 rounded-lg p-2">
                     <span className="text-blue-700 font-bold block">{log.exercises.length}</span>
                     <span className="text-blue-500 text-[9px]">Exercícios</span>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-2">
-                    <span className="text-green-700 font-bold block">{totalVolume.toFixed(0)}kg</span>
-                    <span className="text-green-500 text-[9px]">Volume</span>
                   </div>
                   <div className="bg-orange-50 rounded-lg p-2">
                     <span className="text-orange-700 font-bold block">{Math.floor(log.durationSeconds / 60)}m</span>
@@ -2233,7 +2367,10 @@ export default function App() {
                       {!isEditing && (
                         <>
                           <button 
-                            onClick={() => { setEditingLogId(log.id); setEditingLogData(log); }} 
+                            onClick={() => { 
+                              setEditingLogId(log.id); 
+                              setEditingLogData(JSON.parse(JSON.stringify(log))); 
+                            }} 
                             className="flex-1 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition"
                           >
                             Editar
