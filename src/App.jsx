@@ -351,13 +351,22 @@ const PROGRAMS = {
 
 // --- Helper Functions ---
 const getSmartSubstitutes = (exerciseName) => {
-  const muscles = EXERCISE_MUSCLES[exerciseName] || [];
+  if (!exerciseName) return [];
+  const normalize = (str) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const search = normalize(exerciseName);
+  
+  let foundKey = Object.keys(EXERCISE_MUSCLES).find(k => normalize(k) === search);
+  if (!foundKey) {
+    foundKey = Object.keys(EXERCISE_MUSCLES).find(k => normalize(k).includes(search) || search.includes(normalize(k)));
+  }
+  
+  const muscles = foundKey ? EXERCISE_MUSCLES[foundKey] : [];
   if (muscles.length === 0) return [];
   
   // Procura por exercícios que trabalham os MESMOS músculos
   const smartSubs = Object.keys(EXERCISE_MUSCLES)
     .filter(exName => {
-      if (exName === exerciseName) return false;
+      if (exName === foundKey) return false;
       const exMuscles = EXERCISE_MUSCLES[exName] || [];
       // Retorna exercícios que têm pelo menos um músculo em comum
       return muscles.some(m => exMuscles.includes(m));
@@ -855,9 +864,12 @@ export default function App() {
       volume,
       points,
       workoutType,
-      currentStreak,
-      runMode: currentWorkout.modalityId === 'run' ? runMode : undefined
+      currentStreak
     };
+    
+    if (currentWorkout.modalityId === 'run') {
+      workoutData.runMode = runMode;
+    }
 
     // Se for corrida livre, adicionar dados de distância e pace
     if (currentWorkout.modalityId === 'run' && runMode === 'free') {
