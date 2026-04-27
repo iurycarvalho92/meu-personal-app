@@ -352,11 +352,16 @@ const PROGRAMS = {
 // --- Helper Functions ---
 const getSmartSubstitutes = (exerciseName) => {
   if (!exerciseName) return [];
-  const normalize = (str) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const normalize = (str) => {
+    if (typeof str !== 'string') return '';
+    return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  };
+  
   const search = normalize(exerciseName);
+  if (!search || search.length < 2) return [];
   
   let foundKey = Object.keys(EXERCISE_MUSCLES).find(k => normalize(k) === search);
-  if (!foundKey) {
+  if (!foundKey && search.length >= 3) {
     foundKey = Object.keys(EXERCISE_MUSCLES).find(k => normalize(k).includes(search) || search.includes(normalize(k)));
   }
   
@@ -882,7 +887,9 @@ export default function App() {
       workoutData.gainedSavedSequence = true;
     }
 
-    await addDoc(logsRef, workoutData);
+    const cleanWorkoutData = JSON.parse(JSON.stringify(workoutData));
+
+    await addDoc(logsRef, cleanWorkoutData);
     setCurrentWorkout(null);
     setWorkoutEffort(null);
     setRunMode('planned');
