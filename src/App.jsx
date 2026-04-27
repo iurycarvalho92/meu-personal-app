@@ -2022,14 +2022,26 @@ export default function App() {
         ...ex,
         setDetails: ex.setDetails && ex.setDetails.length > 0 ? ex.setDetails : [{ weight: '', reps: '', completed: false }]
       }));
+      const newVolume = calculateVolumeImproved(processedExercises);
+      const newTotalCompleted = processedExercises.filter(e => e.completed !== false).length; 
+      const newPoints = 10 + (editingLogData.effort || 3) * 5 + newTotalCompleted * 2 + Math.floor(newVolume / 100);
+
       const updateData = { 
         exercises: processedExercises,
         runMode: editingLogData.runMode,
         distance: editingLogData.distance,
         pace: editingLogData.pace,
-        durationSeconds: editingLogData.durationSeconds
+        durationSeconds: editingLogData.durationSeconds,
+        timestamp: editingLogData.timestamp,
+        effort: editingLogData.effort,
+        volume: newVolume,
+        points: newPoints,
+        totalCompleted: newTotalCompleted
       };
-      await updateDoc(logRef, updateData);
+      
+      const cleanUpdateData = JSON.parse(JSON.stringify(updateData));
+      
+      await updateDoc(logRef, cleanUpdateData);
       setEditingLogId(null);
       setEditingLogData(null);
     };
@@ -2289,16 +2301,43 @@ export default function App() {
                           + Adicionar Exercício
                         </button>
 
-                        {/* Duration Field */}
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                          <label className="text-[10px] font-bold text-gray-600 uppercase block mb-2">Duração (minutos)</label>
-                          <input 
-                            type="number" 
-                            className="w-full p-2 bg-white border border-yellow-200 rounded text-sm font-bold text-gray-800" 
-                            value={Math.round((editingLogData.durationSeconds || 0) / 60)}
-                            onChange={(e) => setEditingLogData({...editingLogData, durationSeconds: Math.round(Number(e.target.value) * 60)})}
-                            placeholder="Minutos"
-                          />
+                        {/* Meta Fields (Date, Duration, Effort) */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+                            <label className="text-[10px] font-bold text-blue-600 uppercase block mb-1">Data</label>
+                            <input 
+                              type="date" 
+                              className="w-full p-1.5 bg-white border border-blue-200 rounded text-xs font-bold text-gray-800" 
+                              value={new Date(editingLogData.timestamp || Date.now()).toISOString().split('T')[0]}
+                              onChange={(e) => {
+                                const newDate = new Date(e.target.value);
+                                newDate.setHours(12);
+                                setEditingLogData({...editingLogData, timestamp: newDate.getTime()});
+                              }}
+                            />
+                          </div>
+                          
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                            <label className="text-[10px] font-bold text-yellow-600 uppercase block mb-1">Duração (min)</label>
+                            <input 
+                              type="number" 
+                              className="w-full p-1.5 bg-white border border-yellow-200 rounded text-xs font-bold text-gray-800" 
+                              value={Math.round((editingLogData.durationSeconds || 0) / 60)}
+                              onChange={(e) => setEditingLogData({...editingLogData, durationSeconds: Math.round(Number(e.target.value) * 60)})}
+                              placeholder="Min"
+                            />
+                          </div>
+
+                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-2">
+                            <label className="text-[10px] font-bold text-purple-600 uppercase block mb-1">Esforço</label>
+                            <select 
+                              className="w-full p-1.5 bg-white border border-purple-200 rounded text-xs font-bold text-gray-800"
+                              value={editingLogData.effort || 3}
+                              onChange={(e) => setEditingLogData({...editingLogData, effort: Number(e.target.value)})}
+                            >
+                              {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
                         </div>
 
                         {/* Run Mode Settings */}
